@@ -8,8 +8,7 @@
     local lighting = game:GetService("Lighting")
     local run = game:GetService("RunService")
     local stats = game:GetService("Stats")
-    local coregui = game:GetService("CoreGui")
-    local gui_parent = (gethui and gethui()) or (get_hidden_gui and get_hidden_gui()) or coregui
+    local gui_parent = gethui()
     local debris = game:GetService("Debris")
     local tween_service = game:GetService("TweenService")
     local sound_service = game:GetService("SoundService")
@@ -3438,7 +3437,7 @@
             local screen = library.keybind_screen
             if not screen then
                 screen = library:create( "ScreenGui" , {
-                    Parent = (library[ "items" ] and library[ "items" ].Parent) or game:GetService("CoreGui");
+                    Parent = (library[ "items" ] and library[ "items" ].Parent) or gui_parent;
                     Name = "\0";
                     Enabled = true;
                     ResetOnSpawn = false;
@@ -3569,7 +3568,7 @@
             local screen = library.presence_screen
             if not screen then
                 screen = library:create( "ScreenGui" , {
-                    Parent = (library[ "items" ] and library[ "items" ].Parent) or game:GetService("CoreGui");
+                    Parent = (library[ "items" ] and library[ "items" ].Parent) or gui_parent;
                     Name = "\0";
                     Enabled = true;
                     ResetOnSpawn = false;
