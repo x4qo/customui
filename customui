@@ -1189,7 +1189,16 @@
                     local accum, frames, fps   = 0, 0, 0
                     local sinceText            = 0
                     local lastFps, lastPing    = -1, -1
+                    local guiRoot              = library[ "items" ]
+                    local infoLabel            = items[ "other_info" ]
+                    -- hoisted so the update path allocates no per-call closure
+                    local function readPing()
+                        return floor(lp:GetNetworkPing() * 1000 + 0.5)
+                    end
                     run.RenderStepped:Connect(function(dt)
+                        -- this only feeds a label in the menu topbar; when the menu
+                        -- is closed there is nothing to show, so do zero work
+                        if guiRoot and not guiRoot.Enabled then return end
                         accum     = accum + dt
                         sinceText = sinceText + dt
                         frames    = frames + 1
@@ -1199,11 +1208,11 @@
                         end
                         if sinceText < 0.5 then return end
                         sinceText = 0
-                        local ping = 0
-                        pcall(function() ping = floor(lp:GetNetworkPing() * 1000 + 0.5) end)
+                        local ok, ping = pcall(readPing)
+                        if not ok then ping = lastPing end
                         if fps == lastFps and ping == lastPing then return end
                         lastFps, lastPing = fps, ping
-                        items[ "other_info" ].Text = string.format(
+                        infoLabel.Text = string.format(
                             '<font color="rgb(72, 72, 73)">fps:</font> %d  <font color="rgb(72, 72, 73)">ping:</font> %dms',
                             fps, ping
                         )
@@ -3781,6 +3790,8 @@
                 local sinceText           = 0
                 local lastFps, lastPing   = -1, -1
                 library:connection(run.RenderStepped, function(dt)
+                    -- the presence bar is hidden most of the time; don't sample for it
+                    if not bar.Visible then return end
                     accum     = accum + dt
                     sinceText = sinceText + dt
                     frames    = frames + 1
@@ -3825,11 +3836,16 @@
             local acc = 0
             run.RenderStepped:Connect(function(dt)
                 acc = acc + dt
-                if acc < 0.05 then return end
+                if acc < 0.1 then return end
                 acc = 0
 
+                -- do nothing while the on-screen list is turned off, hidden or
+                -- empty: this is the difference between an idle per-frame scan
+                -- running forever and zero work when the list isn't in use.
+                if library.keybind_panel_enabled == false then return end
+                if library.keybind_list and not library.keybind_list.Visible then return end
                 local entries = library.keybind_entries
-                if not entries then return end
+                if not entries or not next(entries) then return end
 
                 for _, e in entries do
                     local enabled = e.get_enabled and (e.get_enabled() and true or false) or false
