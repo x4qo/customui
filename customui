@@ -810,7 +810,10 @@
                     title_driver_started = true
 
                     local N, BAND, SPEED = 8, 0.22, 0.35
-                    local FRAMES = 24         -- baked frames for one full cycle
+                    -- high frame count = many distinct positions per cycle, so the
+                    -- band sweep reads as continuous motion instead of stepping.
+                    -- Still baked once per accent color, so it stays allocation-free.
+                    local FRAMES = 240        -- baked frames for one full cycle
                     local white = rgb(255, 255, 255)
 
                     -- The band-sweep is a perfectly looping animation, so bake one
@@ -872,13 +875,25 @@
                     local prev_color, stable = nil, 0
                     run.RenderStepped:Connect(function(dt)
                         acc = acc + dt
-                        if acc < 1 / 12 then return end
+                        -- ~90Hz update cap (was 12Hz, which is what made the sweep
+                        -- look choppy). The per-frame work is just a LUT index +
+                        -- setting .Color on the gradients, so this stays cheap.
+                        if acc < 1 / 90 then return end
                         acc = 0
                         -- nothing to drive (all gradients destroyed) -> stop working
                         if #title_gradients == 0 then return end
-                        -- skip entirely while the menu is hidden
-                        local gui = library[ "items" ]
-                        if gui and not gui.Enabled then return end
+                        -- Keep shimmering while the menu is open OR while a host
+                        -- predicate says a gradient is still on screen (e.g. an
+                        -- external floating presence bar visible with the menu
+                        -- closed). Otherwise idle, so the driver stays weightless
+                        -- whenever nothing using a gradient is actually visible.
+                        local active = library.animate_title_active
+                        if active then
+                            if not active() then return end
+                        else
+                            local gui = library[ "items" ]
+                            if gui and not gui.Enabled then return end
+                        end
 
                         local c = themes.preset.accent
                         if c == prev_color then
