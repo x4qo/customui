@@ -463,6 +463,10 @@
         end
 
         function library:update_theme(theme, color)
+            if themes.preset[theme] == color then
+                return
+            end
+
             for _, property in themes.utility[theme] do
 
                 for m, object in property do
@@ -805,36 +809,54 @@
                     if title_driver_started then return end
                     title_driver_started = true
 
-                    local N, BAND, SPEED = 12, 0.22, 0.35
+                    local N, BAND, SPEED = 8, 0.22, 0.35
+                    local FRAMES = 24         -- baked frames for one full cycle
                     local white = rgb(255, 255, 255)
-                    local acc = 0
-                    local kps = {}            -- reused buffer (no per-frame table churn)
-                    for i = 0, N do kps[i + 1] = false end
-                    run.RenderStepped:Connect(function(dt)
-                        acc = acc + dt
-                        if acc < 1 / 30 then return end
-                        acc = 0
-                        -- nothing to drive (all gradients destroyed) -> stop working
-                        if #title_gradients == 0 then return end
-                        -- skip entirely while the menu is hidden: invisible gradients
-                        -- don't need updating and this is the main idle CPU cost
-                        local gui = library[ "items" ]
-                        if gui and not gui.Enabled then return end
 
-                        local c = themes.preset.accent
-                        local phase  = (tick() * SPEED) % 1
+                    -- The band-sweep is a perfectly looping animation, so bake one
+                    -- full cycle of ColorSequences ONCE per accent color and just
+                    -- index into it every frame -> zero per-frame allocation. The
+                    -- heavy Lerp/build only runs when the accent actually changes.
+                    local lut, lut_color = {}, nil
+                    local function bake(c)
+                        local kps = {}
+                        for f = 0, FRAMES - 1 do
+                            local phase  = f / FRAMES
+                            local phase2 = (phase + 0.5) % 1
+                            for i = 0, N do
+                                local x = i / N
+                                local d1 = math.abs(((x - phase  + 0.5) % 1) - 0.5)
+                                local d2 = math.abs(((x - phase2 + 0.5) % 1) - 0.5)
+                                local t1 = math.max(0, 1 - d1 / BAND); t1 = t1 * t1 * (3 - 2 * t1)
+                                local t2 = math.max(0, 1 - d2 / BAND); t2 = t2 * t2 * (3 - 2 * t2)
+                                local t = math.max(t1, t2)
+                                kps[i + 1] = rgbkey(x, c:Lerp(white, t * 0.6))
+                            end
+                            lut[f + 1] = rgbseq(kps)
+                        end
+                        lut_color = c
+                    end
+
+                    -- 1-alloc fallback used only while the accent is actively moving
+                    -- (rainbow / theme change), so we never re-bake the whole cycle
+                    -- per frame. Once it settles we bake and go alloc-free.
+                    local kps_buf = {}
+                    for i = 0, N do kps_buf[i + 1] = false end
+                    local function build_one(c, phase)
                         local phase2 = (phase + 0.5) % 1
                         for i = 0, N do
                             local x = i / N
-
                             local d1 = math.abs(((x - phase  + 0.5) % 1) - 0.5)
                             local d2 = math.abs(((x - phase2 + 0.5) % 1) - 0.5)
                             local t1 = math.max(0, 1 - d1 / BAND); t1 = t1 * t1 * (3 - 2 * t1)
                             local t2 = math.max(0, 1 - d2 / BAND); t2 = t2 * t2 * (3 - 2 * t2)
                             local t = math.max(t1, t2)
-                            kps[i + 1] = rgbkey(x, c:Lerp(white, t * 0.6))
+                            kps_buf[i + 1] = rgbkey(x, c:Lerp(white, t * 0.6))
                         end
-                        local seq = rgbseq(kps)
+                        return rgbseq(kps_buf)
+                    end
+
+                    local function apply(seq)
                         for idx = #title_gradients, 1, -1 do
                             local g = title_gradients[idx]
                             if g.Parent then
@@ -842,6 +864,41 @@
                             else
                                 remove(title_gradients, idx)
                             end
+                        end
+                    end
+
+                    local acc = 0
+                    local last_idx = -1
+                    local prev_color, stable = nil, 0
+                    run.RenderStepped:Connect(function(dt)
+                        acc = acc + dt
+                        if acc < 1 / 12 then return end
+                        acc = 0
+                        -- nothing to drive (all gradients destroyed) -> stop working
+                        if #title_gradients == 0 then return end
+                        -- skip entirely while the menu is hidden
+                        local gui = library[ "items" ]
+                        if gui and not gui.Enabled then return end
+
+                        local c = themes.preset.accent
+                        if c == prev_color then
+                            if stable < 1000 then stable = stable + 1 end
+                        else
+                            stable, prev_color = 0, c
+                        end
+
+                        local phase = (tick() * SPEED) % 1
+
+                        if c == lut_color then
+                            local idx = (floor(phase * FRAMES) % FRAMES) + 1
+                            if idx == last_idx then return end
+                            last_idx = idx
+                            apply(lut[idx])
+                        elseif stable >= 8 then
+                            bake(c)
+                            last_idx = -1
+                        else
+                            apply(build_one(c, phase))
                         end
                     end)
                 end
