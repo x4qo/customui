@@ -293,7 +293,7 @@
                         )
                     )
 
-                    library:tween(frame, {Size = current_size}, Enum.EasingStyle.Linear, 0.05)
+                    frame.Size = current_size
                 end
             end)
         end
@@ -361,7 +361,7 @@
                         )
                     )
 
-                    library:tween(frame, {Position = current_position}, Enum.EasingStyle.Linear, 0.05)
+                    frame.Position = current_position
                     library:close_element()
                 end
             end)
@@ -806,15 +806,24 @@
                     title_driver_started = true
 
                     local N, BAND, SPEED = 12, 0.22, 0.35
+                    local white = rgb(255, 255, 255)
                     local acc = 0
+                    local kps = {}            -- reused buffer (no per-frame table churn)
+                    for i = 0, N do kps[i + 1] = false end
                     run.RenderStepped:Connect(function(dt)
                         acc = acc + dt
                         if acc < 1 / 30 then return end
                         acc = 0
+                        -- nothing to drive (all gradients destroyed) -> stop working
+                        if #title_gradients == 0 then return end
+                        -- skip entirely while the menu is hidden: invisible gradients
+                        -- don't need updating and this is the main idle CPU cost
+                        local gui = library[ "items" ]
+                        if gui and not gui.Enabled then return end
+
                         local c = themes.preset.accent
                         local phase  = (tick() * SPEED) % 1
                         local phase2 = (phase + 0.5) % 1
-                        local kps = {}
                         for i = 0, N do
                             local x = i / N
 
@@ -823,7 +832,7 @@
                             local t1 = math.max(0, 1 - d1 / BAND); t1 = t1 * t1 * (3 - 2 * t1)
                             local t2 = math.max(0, 1 - d2 / BAND); t2 = t2 * t2 * (3 - 2 * t2)
                             local t = math.max(t1, t2)
-                            kps[#kps + 1] = rgbkey(x, c:Lerp(rgb(255, 255, 255), t * 0.6))
+                            kps[i + 1] = rgbkey(x, c:Lerp(white, t * 0.6))
                         end
                         local seq = rgbseq(kps)
                         for idx = #title_gradients, 1, -1 do
@@ -2602,12 +2611,17 @@
 
                 -- keep the popup glued to the dropdown button every frame so it
                 -- tracks scrolling / window drags at full 60fps without lag
+                local last_px, last_py
                 local function reposition()
                     local popWidth = math.max(items[ "dropdown" ].AbsoluteSize.X, 160)
-                    items[ "dropdown_holder" ].Position = dim2(
-                        0, items[ "dropdown" ].AbsolutePosition.X - (popWidth - items[ "dropdown" ].AbsoluteSize.X),
-                        0, items[ "dropdown" ].AbsolutePosition.Y + 80
-                    )
+                    local px = items[ "dropdown" ].AbsolutePosition.X - (popWidth - items[ "dropdown" ].AbsoluteSize.X)
+                    local py = items[ "dropdown" ].AbsolutePosition.Y + 80
+                    -- only touch Position when it actually moved; writing it every
+                    -- frame forces a needless layout pass on the popup
+                    if px ~= last_px or py ~= last_py then
+                        last_px, last_py = px, py
+                        items[ "dropdown_holder" ].Position = dim2(0, px, 0, py)
+                    end
                     return popWidth
                 end
 
@@ -3749,7 +3763,14 @@
             if library.keybind_loop_started then return end
             library.keybind_loop_started = true
 
-            run.RenderStepped:Connect(function()
+            -- the status text only needs to refresh a few times a second;
+            -- polling every frame was pure overhead.
+            local acc = 0
+            run.RenderStepped:Connect(function(dt)
+                acc = acc + dt
+                if acc < 0.05 then return end
+                acc = 0
+
                 local entries = library.keybind_entries
                 if not entries then return end
 
