@@ -254,27 +254,15 @@
             Frame.BackgroundTransparency = 1
             Frame.Text = ""
 
-            local resizing = false
             local start_size
             local start
             local og_size = frame.Size
+            local resize_conn
 
-            Frame.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    resizing = true
-                    start = input.Position
-                    start_size = frame.Size
-                end
-            end)
-
-            Frame.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    resizing = false
-                end
-            end)
-
-            library:connection(uis.InputChanged, function(input, game_event)
-                if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+            -- only listen to mouse movement while actively resizing, instead of a
+            -- permanent InputChanged that runs on every mouse move
+            local function on_resize(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
                     local viewport_x = camera.ViewportSize.X
                     local viewport_y = camera.ViewportSize.Y
 
@@ -294,6 +282,21 @@
                     )
 
                     frame.Size = current_size
+                end
+            end
+
+            Frame.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    start = input.Position
+                    start_size = frame.Size
+                    if resize_conn then resize_conn:Disconnect() end
+                    resize_conn = uis.InputChanged:Connect(on_resize)
+                end
+            end)
+
+            library:connection(uis.InputEnded, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    if resize_conn then resize_conn:Disconnect(); resize_conn = nil end
                 end
             end)
         end
@@ -323,26 +326,14 @@
         end
 
         function library:draggify(frame)
-            local dragging = false
             local start_size = frame.Position
             local start
+            local move_conn
 
-            frame.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    dragging = true
-                    start = input.Position
-                    start_size = frame.Position
-                end
-            end)
-
-            frame.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    dragging = false
-                end
-            end)
-
-            library:connection(uis.InputChanged, function(input, game_event)
-                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            -- only listen to mouse movement while actively dragging, instead of a
+            -- permanent InputChanged that runs on every mouse move
+            local function on_move(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
                     local viewport_x = camera.ViewportSize.X
                     local viewport_y = camera.ViewportSize.Y
 
@@ -363,6 +354,23 @@
 
                     frame.Position = current_position
                     library:close_element()
+                end
+            end
+
+            frame.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    start = input.Position
+                    start_size = frame.Position
+                    if move_conn then move_conn:Disconnect() end
+                    move_conn = uis.InputChanged:Connect(on_move)
+                end
+            end)
+
+            -- stop on release anywhere (more reliable than frame.InputEnded, which
+            -- can miss a release that happens off the frame after a fast drag)
+            library:connection(uis.InputEnded, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    if move_conn then move_conn:Disconnect(); move_conn = nil end
                 end
             end)
         end
@@ -2388,23 +2396,32 @@
                 cfg.callback(flags[cfg.flag])
             end
 
-            items[ "slider" ].MouseButton1Down:Connect(function()
-                cfg.dragging = true
-                library:tween(items[ "value" ], {TextColor3 = rgb(255, 255, 255)}, Enum.EasingStyle.Quad, 0.2)
-            end)
-
-            library:connection(uis.InputChanged, function(input)
+            -- listen to movement only while the slider is held, instead of a
+            -- permanent InputChanged firing on every mouse move
+            local slider_move_conn
+            local function slider_on_move(input)
                 -- accept touch movement so mobile players can drag the slider
-                if cfg.dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
                     local size_x = (input.Position.X - items[ "slider" ].AbsolutePosition.X) / items[ "slider" ].AbsoluteSize.X
                     local value = ((cfg.max - cfg.min) * size_x) + cfg.min
                     cfg.set(value)
                 end
+            end
+
+            items[ "slider" ].MouseButton1Down:Connect(function()
+                cfg.dragging = true
+                if slider_move_conn then slider_move_conn:Disconnect() end
+                slider_move_conn = uis.InputChanged:Connect(slider_on_move)
+                library:tween(items[ "value" ], {TextColor3 = rgb(255, 255, 255)}, Enum.EasingStyle.Quad, 0.2)
             end)
 
             library:connection(uis.InputEnded, function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    -- only react to the release that ends an actual drag, so a click
+                    -- anywhere no longer spawns a tween for every slider on screen
+                    if not cfg.dragging then return end
                     cfg.dragging = false
+                    if slider_move_conn then slider_move_conn:Disconnect(); slider_move_conn = nil end
                     library:tween(items[ "value" ], {TextColor3 = rgb(72, 72, 73)}, Enum.EasingStyle.Quad, 0.2)
                 end
             end)
@@ -3339,30 +3356,43 @@
                 cfg.set_visible(cfg.open)
             end)
 
-            uis.InputChanged:Connect(function(input)
-                if (dragging_sat or dragging_hue or dragging_alpha) and input.UserInputType == Enum.UserInputType.MouseMovement then
-                    cfg.update_color()
-                end
-            end)
+            -- only track mouse movement while a sat/hue/alpha handle is held,
+            -- instead of a permanent InputChanged firing on every mouse move
+            local cp_move_conn
+            local function cp_start_drag()
+                if cp_move_conn then return end
+                cp_move_conn = uis.InputChanged:Connect(function(input)
+                    if (dragging_sat or dragging_hue or dragging_alpha) and input.UserInputType == Enum.UserInputType.MouseMovement then
+                        cfg.update_color()
+                    end
+                end)
+            end
+            local function cp_stop_drag()
+                if cp_move_conn then cp_move_conn:Disconnect(); cp_move_conn = nil end
+            end
 
             library:connection(uis.InputEnded, function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                     dragging_sat = false
                     dragging_hue = false
                     dragging_alpha = false
+                    cp_stop_drag()
                 end
             end)
 
             items[ "alpha_gradient" ].MouseButton1Down:Connect(function()
                 dragging_alpha = true
+                cp_start_drag()
             end)
 
             items[ "hue_gradient" ].MouseButton1Down:Connect(function()
                 dragging_hue = true
+                cp_start_drag()
             end)
 
             items[ "sat" ].MouseButton1Down:Connect(function()
                 dragging_sat = true
+                cp_start_drag()
             end)
 
             items[ "input" ].FocusLost:Connect(function()
