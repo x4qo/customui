@@ -243,6 +243,37 @@
             return tween
         end
 
+        -- One shared fps/ping sampler. Every widget that shows fps/ping (the topbar
+        -- info row, the presence bar) registers a consumer here instead of opening
+        -- its own RenderStepped connection. The single loop counts frames + reads
+        -- ping at most twice a second; consumers do their own visibility guard and
+        -- change dedupe, so a hidden widget costs nothing.
+        function library:on_fps(callback)
+            if not self.fps_consumers then
+                self.fps_consumers = {}
+                local accum, frames, fps = 0, 0, 0
+                local sinceText = 0
+                local ping = 0
+                run.RenderStepped:Connect(function(dt)
+                    accum     = accum + dt
+                    sinceText = sinceText + dt
+                    frames    = frames + 1
+                    if accum >= 0.5 then
+                        fps = floor(frames / accum + 0.5)
+                        accum, frames = 0, 0
+                    end
+                    if sinceText < 0.5 then return end
+                    sinceText = 0
+                    pcall(function() ping = floor(lp:GetNetworkPing() * 1000 + 0.5) end)
+                    local consumers = self.fps_consumers
+                    for i = 1, #consumers do
+                        pcall(consumers[i], fps, ping)
+                    end
+                end)
+            end
+            insert(self.fps_consumers, callback)
+        end
+
         function library:resizify(frame)
             local Frame = Instance.new("TextButton")
             Frame.Position = dim2(1, -10, 1, -10)
@@ -812,89 +843,45 @@
                 -- exact same frame / phase (guaranteed in sync)
                 local title_gradients = {}
                 local title_driver_started = false
+                local title_shine_seq = nil
+                local title_white = rgb(255, 255, 255)
+
+                -- static "shine band": accent everywhere with a soft white highlight
+                -- centred at 0.5. Rebuilt only when the accent colour changes.
+                local function title_build_shine(c)
+                    local hi  = c:Lerp(title_white, 0.6)
+                    local mid = c:Lerp(title_white, 0.22)
+                    return rgbseq({
+                        rgbkey(0.00, c),
+                        rgbkey(0.32, c),
+                        rgbkey(0.42, mid),
+                        rgbkey(0.50, hi),
+                        rgbkey(0.58, mid),
+                        rgbkey(0.68, c),
+                        rgbkey(1.00, c),
+                    })
+                end
+
                 local function animate_title(grad)
                     insert(title_gradients, grad)
+                    -- match the current shine immediately so a late-registered
+                    -- gradient never flashes its previous colour
+                    if title_shine_seq then grad.Color = title_shine_seq end
                     if title_driver_started then return end
                     title_driver_started = true
 
-                    local N, BAND, SPEED = 8, 0.22, 0.35
-                    -- high frame count = many distinct positions per cycle, so the
-                    -- band sweep reads as continuous motion instead of stepping.
-                    -- Still baked once per accent color, so it stays allocation-free.
-                    local FRAMES = 240        -- baked frames for one full cycle
-                    local white = rgb(255, 255, 255)
+                    -- The old driver rewrote every gradient's .Color every frame,
+                    -- which re-tessellates the text on each change. Now the colour is
+                    -- a STATIC band (rebuilt only on accent change) and we just slide
+                    -- UIGradient.Offset.X each frame: the same sweeping highlight, but
+                    -- Offset writes never touch the text geometry, so it is basically
+                    -- free. Offset clamps (no wrap), so we sweep from fully off the
+                    -- left edge to fully off the right edge and reset while invisible.
+                    local SPEED = 0.4
+                    local cur_accent = nil
 
-                    -- The band-sweep is a perfectly looping animation, so bake one
-                    -- full cycle of ColorSequences ONCE per accent color and just
-                    -- index into it every frame -> zero per-frame allocation. The
-                    -- heavy Lerp/build only runs when the accent actually changes.
-                    local lut, lut_color = {}, nil
-                    local function bake(c)
-                        local kps = {}
-                        for f = 0, FRAMES - 1 do
-                            local phase  = f / FRAMES
-                            local phase2 = (phase + 0.5) % 1
-                            for i = 0, N do
-                                local x = i / N
-                                local d1 = math.abs(((x - phase  + 0.5) % 1) - 0.5)
-                                local d2 = math.abs(((x - phase2 + 0.5) % 1) - 0.5)
-                                local t1 = math.max(0, 1 - d1 / BAND); t1 = t1 * t1 * (3 - 2 * t1)
-                                local t2 = math.max(0, 1 - d2 / BAND); t2 = t2 * t2 * (3 - 2 * t2)
-                                local t = math.max(t1, t2)
-                                kps[i + 1] = rgbkey(x, c:Lerp(white, t * 0.6))
-                            end
-                            lut[f + 1] = rgbseq(kps)
-                        end
-                        lut_color = c
-                    end
-
-                    -- 1-alloc fallback used only while the accent is actively moving
-                    -- (rainbow / theme change), so we never re-bake the whole cycle
-                    -- per frame. Once it settles we bake and go alloc-free.
-                    local kps_buf = {}
-                    for i = 0, N do kps_buf[i + 1] = false end
-                    local function build_one(c, phase)
-                        local phase2 = (phase + 0.5) % 1
-                        for i = 0, N do
-                            local x = i / N
-                            local d1 = math.abs(((x - phase  + 0.5) % 1) - 0.5)
-                            local d2 = math.abs(((x - phase2 + 0.5) % 1) - 0.5)
-                            local t1 = math.max(0, 1 - d1 / BAND); t1 = t1 * t1 * (3 - 2 * t1)
-                            local t2 = math.max(0, 1 - d2 / BAND); t2 = t2 * t2 * (3 - 2 * t2)
-                            local t = math.max(t1, t2)
-                            kps_buf[i + 1] = rgbkey(x, c:Lerp(white, t * 0.6))
-                        end
-                        return rgbseq(kps_buf)
-                    end
-
-                    local function apply(seq)
-                        for idx = #title_gradients, 1, -1 do
-                            local g = title_gradients[idx]
-                            if g.Parent then
-                                g.Color = seq
-                            else
-                                remove(title_gradients, idx)
-                            end
-                        end
-                    end
-
-                    local acc = 0
-                    local last_idx = -1
-                    local prev_color, stable = nil, 0
-                    run.RenderStepped:Connect(function(dt)
-                        acc = acc + dt
-                        -- ~90Hz update cap (was 12Hz, which is what made the sweep
-                        -- look choppy). The per-frame work is just a LUT index +
-                        -- setting .Color on the gradients, so this stays cheap.
-                        if acc < 1 / 90 then return end
-                        acc = 0
-                        -- nothing to drive (all gradients destroyed) -> stop working
+                    run.RenderStepped:Connect(function()
                         if #title_gradients == 0 then return end
-                        -- Keep shimmering while the menu is open OR while a host
-                        -- predicate says a gradient is still on screen (e.g. an
-                        -- external floating presence bar visible with the menu
-                        -- closed). Otherwise idle, so the driver stays weightless
-                        -- whenever nothing using a gradient is actually visible.
                         local active = library.animate_title_active
                         if active then
                             if not active() then return end
@@ -904,24 +891,27 @@
                         end
 
                         local c = themes.preset.accent
-                        if c == prev_color then
-                            if stable < 1000 then stable = stable + 1 end
-                        else
-                            stable, prev_color = 0, c
+                        if c ~= cur_accent then
+                            cur_accent = c
+                            title_shine_seq = title_build_shine(c)
+                            for idx = #title_gradients, 1, -1 do
+                                local g = title_gradients[idx]
+                                if g.Parent then
+                                    g.Color = title_shine_seq
+                                else
+                                    remove(title_gradients, idx)
+                                end
+                            end
                         end
 
-                        local phase = (tick() * SPEED) % 1
-
-                        if c == lut_color then
-                            local idx = (floor(phase * FRAMES) % FRAMES) + 1
-                            if idx == last_idx then return end
-                            last_idx = idx
-                            apply(lut[idx])
-                        elseif stable >= 8 then
-                            bake(c)
-                            last_idx = -1
-                        else
-                            apply(build_one(c, phase))
+                        local off = vec2(-0.75 + 1.5 * ((tick() * SPEED) % 1), 0)
+                        for idx = #title_gradients, 1, -1 do
+                            local g = title_gradients[idx]
+                            if g.Parent then
+                                g.Offset = off
+                            else
+                                remove(title_gradients, idx)
+                            end
                         end
                     end)
                 end
@@ -1209,30 +1199,11 @@
                 }); library:apply_theme(items[ "other_info" ], "accent", "TextColor3");
 
                 do
-                    local accum, frames, fps   = 0, 0, 0
-                    local sinceText            = 0
-                    local lastFps, lastPing    = -1, -1
-                    local guiRoot              = library[ "items" ]
-                    local infoLabel            = items[ "other_info" ]
-                    -- hoisted so the update path allocates no per-call closure
-                    local function readPing()
-                        return floor(lp:GetNetworkPing() * 1000 + 0.5)
-                    end
-                    run.RenderStepped:Connect(function(dt)
-                        -- this only feeds a label in the menu topbar; when the menu
-                        -- is closed there is nothing to show, so do zero work
+                    local guiRoot   = library[ "items" ]
+                    local infoLabel = items[ "other_info" ]
+                    local lastFps, lastPing = -1, -1
+                    library:on_fps(function(fps, ping)
                         if guiRoot and not guiRoot.Enabled then return end
-                        accum     = accum + dt
-                        sinceText = sinceText + dt
-                        frames    = frames + 1
-                        if accum >= 0.5 then
-                            fps = floor(frames / accum + 0.5)
-                            accum, frames = 0, 0
-                        end
-                        if sinceText < 0.5 then return end
-                        sinceText = 0
-                        local ok, ping = pcall(readPing)
-                        if not ok then ping = lastPing end
                         if fps == lastFps and ping == lastPing then return end
                         lastFps, lastPing = fps, ping
                         infoLabel.Text = string.format(
@@ -3829,25 +3800,11 @@
                 ZIndex = 62;
             })
 
-            -- fps/ping sampling (same scheme as the in-window info row)
+            -- fps/ping via the shared sampler (one RenderStepped for every widget)
             do
-                local accum, frames, fps = 0, 0, 0
-                local sinceText           = 0
-                local lastFps, lastPing   = -1, -1
-                library:connection(run.RenderStepped, function(dt)
-                    -- the presence bar is hidden most of the time; don't sample for it
+                local lastFps, lastPing = -1, -1
+                library:on_fps(function(fps, ping)
                     if not bar.Visible then return end
-                    accum     = accum + dt
-                    sinceText = sinceText + dt
-                    frames    = frames + 1
-                    if accum >= 0.5 then
-                        fps = floor(frames / accum + 0.5)
-                        accum, frames = 0, 0
-                    end
-                    if sinceText < 0.5 then return end
-                    sinceText = 0
-                    local ping = 0
-                    pcall(function() ping = floor(lp:GetNetworkPing() * 1000 + 0.5) end)
                     if fps == lastFps and ping == lastPing then return end
                     lastFps, lastPing = fps, ping
                     fps_label.Text = string.format('%d <font color="rgb(110, 110, 116)">FPS</font>', fps)
