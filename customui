@@ -188,38 +188,43 @@
     local fonts = {}; do
         function Register_Font(Name, Weight, Style, Asset)
             if not isfile(Asset.Id) then
-                writefile(Asset.Id, Asset.Font)
+                local ok, font_data = pcall(function()
+                    return game:HttpGet(Asset.Url)
+                end)
+                if not ok or type(font_data) ~= "string" or font_data == "" then
+                    error("failed to download font: " .. tostring(Name))
+                end
+                writefile(Asset.Id, font_data)
             end
 
-            if isfile(Name .. ".font") then
-                delfile(Name .. ".font")
-            end
-
-            local Data = {
-                name = Name,
-                faces = {
-                    {
-                        name = "Normal",
-                        weight = Weight,
-                        style = Style,
-                        assetId = getcustomasset(Asset.Id),
+            local font_file = Name .. ".font"
+            if not isfile(font_file) then
+                local Data = {
+                    name = Name,
+                    faces = {
+                        {
+                            name = "Normal",
+                            weight = Weight,
+                            style = Style,
+                            assetId = getcustomasset(Asset.Id),
+                        },
                     },
-                },
-            }
+                }
 
-            writefile(Name .. ".font", http_service:JSONEncode(Data))
+                writefile(font_file, http_service:JSONEncode(Data))
+            end
 
-            return getcustomasset(Name .. ".font");
+            return getcustomasset(font_file);
         end
 
         local Medium = Register_Font("Medium", 200, "Normal", {
             Id = "Medium.ttf",
-            Font = game:HttpGet("https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/Inter_28pt-Medium.ttf"),
+            Url = "https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/Inter_28pt-Medium.ttf",
         })
 
         local SemiBold = Register_Font("SemiBold", 200, "Normal", {
             Id = "SemiBold.ttf",
-            Font = game:HttpGet("https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/Inter_28pt-SemiBold.ttf"),
+            Url = "https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/Inter_28pt-SemiBold.ttf",
         })
 
         fonts = {
@@ -877,11 +882,24 @@
                     -- Offset writes never touch the text geometry, so it is basically
                     -- free. Offset clamps (no wrap), so we sweep from fully off the
                     -- left edge to fully off the right edge and reset while invisible.
-                    local SPEED = 0.4
-                    local cur_accent = nil
+                local SPEED = 0.4
+                local cur_accent = nil
+                local function title_gradient_visible(grad)
+                    local node = grad and grad.Parent
+                    while node do
+                        if node:IsA("GuiObject") and not node.Visible then
+                            return false
+                        end
+                        if node:IsA("ScreenGui") and not node.Enabled then
+                            return false
+                        end
+                        node = node.Parent
+                    end
+                    return true
+                end
 
-                    run.RenderStepped:Connect(function()
-                        if #title_gradients == 0 then return end
+                run.RenderStepped:Connect(function()
+                    if #title_gradients == 0 then return end
                         local active = library.animate_title_active
                         if active then
                             if not active() then return end
@@ -908,7 +926,9 @@
                         for idx = #title_gradients, 1, -1 do
                             local g = title_gradients[idx]
                             if g.Parent then
-                                g.Offset = off
+                                if title_gradient_visible(g) then
+                                    g.Offset = off
+                                end
                             else
                                 remove(title_gradients, idx)
                             end
@@ -3637,9 +3657,19 @@
 
         function library:refresh_keybind_panel()
             if not library.keybind_list then return end
-            -- the panel itself is always shown (only the rows come and go);
-            -- the UI setting can hide the whole thing
-            library.keybind_list.Visible = library.keybind_panel_enabled ~= false
+            local visible = false
+            if library.keybind_panel_enabled ~= false then
+                local rows = library.keybind_rows
+                if rows then
+                    for _, row in rows do
+                        if row and row.Parent and row.Visible then
+                            visible = true
+                            break
+                        end
+                    end
+                end
+            end
+            library.keybind_list.Visible = visible
         end
 
         -- toggle the whole panel on/off (used by a UI setting)
@@ -3841,13 +3871,19 @@
                 if acc < 0.1 then return end
                 acc = 0
 
-                -- do nothing while the on-screen list is turned off, hidden or
-                -- empty: this is the difference between an idle per-frame scan
-                -- running forever and zero work when the list isn't in use.
-                if library.keybind_panel_enabled == false then return end
-                if library.keybind_list and not library.keybind_list.Visible then return end
+                -- do nothing while the on-screen list is turned off or empty.
+                -- The panel can be hidden because no rows are active, so do not
+                -- use panel.Visible as a guard; this loop is what lets it wake
+                -- back up when a feature is enabled.
+                if library.keybind_panel_enabled == false then
+                    if library.keybind_list then library.keybind_list.Visible = false end
+                    return
+                end
                 local entries = library.keybind_entries
-                if not entries or not next(entries) then return end
+                if not entries or not next(entries) then
+                    library:refresh_keybind_panel()
+                    return
+                end
 
                 for _, e in entries do
                     local enabled = e.get_enabled and (e.get_enabled() and true or false) or false
@@ -3879,6 +3915,8 @@
                         end
                     end
                 end
+
+                library:refresh_keybind_panel()
             end)
         end
 
