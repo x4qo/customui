@@ -188,8 +188,21 @@
     local fonts = {}; do
         function Register_Font(Name, Weight, Style, Asset)
             if not isfile(Asset.Id) then
+                local requestFunc = type(request) == "function" and request or nil
+                if not requestFunc then
+                    return "rbxasset://fonts/families/GothamSSm.json"
+                end
                 local ok, font_data = pcall(function()
-                    return game:HttpGet(Asset.Url)
+                    local response = requestFunc({
+                        Url = Asset.Url,
+                        Method = "GET",
+                        Headers = { ["User-Agent"] = "MyHub" },
+                    })
+                    local statusCode = type(response) == "table" and tonumber(response.StatusCode or response.status_code or response.Status) or 200
+                    if statusCode and (statusCode < 200 or statusCode >= 300) then
+                        return nil
+                    end
+                    return type(response) == "table" and response.Body or response
                 end)
                 if not ok or type(font_data) ~= "string" or font_data == "" then
                     return "rbxasset://fonts/families/GothamSSm.json"
