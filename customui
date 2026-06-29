@@ -192,7 +192,7 @@
                     return game:HttpGet(Asset.Url)
                 end)
                 if not ok or type(font_data) ~= "string" or font_data == "" then
-                    error("failed to download font: " .. tostring(Name))
+                    return "rbxasset://fonts/families/GothamSSm.json"
                 end
                 writefile(Asset.Id, font_data)
             end
@@ -248,11 +248,11 @@
             return tween
         end
 
-        -- One shared fps/ping sampler. Every widget that shows fps/ping (the topbar
-        -- info row, the presence bar) registers a consumer here instead of opening
-        -- its own RenderStepped connection. The single loop counts frames + reads
-        -- ping at most twice a second; consumers do their own visibility guard and
-        -- change dedupe, so a hidden widget costs nothing.
+        
+        
+        
+        
+        
         function library:on_fps(callback)
             if not self.fps_consumers then
                 self.fps_consumers = {}
@@ -295,8 +295,8 @@
             local og_size = frame.Size
             local resize_conn
 
-            -- only listen to mouse movement while actively resizing, instead of a
-            -- permanent InputChanged that runs on every mouse move
+            
+            
             local function on_resize(input)
                 if input.UserInputType == Enum.UserInputType.MouseMovement then
                     local viewport_x = camera.ViewportSize.X
@@ -366,8 +366,8 @@
             local start
             local move_conn
 
-            -- only listen to mouse movement while actively dragging, instead of a
-            -- permanent InputChanged that runs on every mouse move
+            
+            
             local function on_move(input)
                 if input.UserInputType == Enum.UserInputType.MouseMovement then
                     local viewport_x = camera.ViewportSize.X
@@ -402,8 +402,8 @@
                 end
             end)
 
-            -- stop on release anywhere (more reliable than frame.InputEnded, which
-            -- can miss a release that happens off the frame after a fast drag)
+            
+            
             library:connection(uis.InputEnded, function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                     if move_conn then move_conn:Disconnect(); move_conn = nil end
@@ -663,8 +663,8 @@
                 IgnoreGuiInset = true;
             });
 
-            -- notifications live in their own ScreenGui so they still show while
-            -- the menu (library["items"]) is closed via toggle_menu
+            
+            
             library[ "notifications_gui" ] = library:create( "ScreenGui" , {
                 Parent = gui_parent;
                 Name = "\0";
@@ -844,15 +844,15 @@
                     Color = accent_sequence(themes.preset.accent)
                 });
 
-                -- single shared driver so every title gradient shimmers on the
-                -- exact same frame / phase (guaranteed in sync)
+                
+                
                 local title_gradients = {}
                 local title_driver_started = false
                 local title_shine_seq = nil
                 local title_white = rgb(255, 255, 255)
 
-                -- static "shine band": accent everywhere with a soft white highlight
-                -- centred at 0.5. Rebuilt only when the accent colour changes.
+                
+                
                 local function title_build_shine(c)
                     local hi  = c:Lerp(title_white, 0.6)
                     local mid = c:Lerp(title_white, 0.22)
@@ -869,19 +869,19 @@
 
                 local function animate_title(grad)
                     insert(title_gradients, grad)
-                    -- match the current shine immediately so a late-registered
-                    -- gradient never flashes its previous colour
+                    
+                    
                     if title_shine_seq then grad.Color = title_shine_seq end
                     if title_driver_started then return end
                     title_driver_started = true
 
-                    -- The old driver rewrote every gradient's .Color every frame,
-                    -- which re-tessellates the text on each change. Now the colour is
-                    -- a STATIC band (rebuilt only on accent change) and we just slide
-                    -- UIGradient.Offset.X each frame: the same sweeping highlight, but
-                    -- Offset writes never touch the text geometry, so it is basically
-                    -- free. Offset clamps (no wrap), so we sweep from fully off the
-                    -- left edge to fully off the right edge and reset while invisible.
+                    
+                    
+                    
+                    
+                    
+                    
+                    
                 local SPEED = 0.4
                 local cur_accent = nil
                 local function title_gradient_visible(grad)
@@ -936,8 +936,8 @@
                     end)
                 end
 
-                -- expose so other panels (e.g. the keybind list) can register
-                -- their gradients into the same synced shimmer driver
+                
+                
                 library.animate_title = animate_title
 
                 if library.animated_title then
@@ -1398,8 +1398,8 @@
                                     BackgroundColor3 = rgb(255, 255, 255)
                                 }); library:apply_theme(multi_items[ "icon" ], "accent", "ImageColor3");
 
-                                -- mirror the sidebar tab icon live (the consumer may
-                                -- assign the real icon after the tab is built)
+                                
+                                
                                 local function sync_icon()
                                     multi_items[ "icon" ].Image = items[ "icon" ].Image
                                 end
@@ -2387,11 +2387,11 @@
                 cfg.callback(flags[cfg.flag])
             end
 
-            -- listen to movement only while the slider is held, instead of a
-            -- permanent InputChanged firing on every mouse move
+            
+            
             local slider_move_conn
             local function slider_on_move(input)
-                -- accept touch movement so mobile players can drag the slider
+                
                 if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
                     local size_x = (input.Position.X - items[ "slider" ].AbsolutePosition.X) / items[ "slider" ].AbsoluteSize.X
                     local value = ((cfg.max - cfg.min) * size_x) + cfg.min
@@ -2408,8 +2408,8 @@
 
             library:connection(uis.InputEnded, function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    -- only react to the release that ends an actual drag, so a click
-                    -- anywhere no longer spawns a tween for every slider on screen
+                    
+                    
                     if not cfg.dragging then return end
                     cfg.dragging = false
                     if slider_move_conn then slider_move_conn:Disconnect(); slider_move_conn = nil end
@@ -2637,7 +2637,7 @@
                         CornerRadius = dim(0, 4)
                     });
 
-                    -- popout scale (animated open in set_visible)
+                    
                     items[ "scale" ] = library:create( "UIScale" , {
                         Parent = items[ "outline" ];
                         Scale = 1
@@ -2682,7 +2682,7 @@
                     return flags[cfg.flag] == button.Text
                 end
 
-                -- hover = solid accent pill with dark text
+                
                 button.MouseEnter:Connect(function()
                     library:tween(button, { BackgroundTransparency = 0 }, Enum.EasingStyle.Quad, 0.12)
                     library:tween(button, { TextColor3 = rgb(18, 18, 22) }, Enum.EasingStyle.Quad, 0.12)
@@ -2698,15 +2698,15 @@
             function cfg.set_visible(bool)
                 local a = bool and cfg.y_size or 0
 
-                -- keep the popup glued to the dropdown button every frame so it
-                -- tracks scrolling / window drags at full 60fps without lag
+                
+                
                 local last_px, last_py
                 local function reposition()
                     local popWidth = math.max(items[ "dropdown" ].AbsoluteSize.X, 160)
                     local px = items[ "dropdown" ].AbsolutePosition.X - (popWidth - items[ "dropdown" ].AbsoluteSize.X)
                     local py = items[ "dropdown" ].AbsolutePosition.Y + 80
-                    -- only touch Position when it actually moved; writing it every
-                    -- frame forces a needless layout pass on the popup
+                    
+                    
                     if px ~= last_px or py ~= last_py then
                         last_px, last_py = px, py
                         items[ "dropdown_holder" ].Position = dim2(0, px, 0, py)
@@ -2714,7 +2714,7 @@
                     return popWidth
                 end
 
-                -- tear down any previous follow loop before (re)opening / closing
+                
                 if cfg._follow then cfg._follow:Disconnect(); cfg._follow = nil end
 
                 local popWidth = reposition()
@@ -3347,8 +3347,8 @@
                 cfg.set_visible(cfg.open)
             end)
 
-            -- only track mouse movement while a sat/hue/alpha handle is held,
-            -- instead of a permanent InputChanged firing on every mouse move
+            
+            
             local cp_move_conn
             local function cp_start_drag()
                 if cp_move_conn then return end
@@ -3539,7 +3539,7 @@
             return setmetatable(cfg, library)
         end
 
-        -- on-screen "active keybinds" panel (opt-in per keybind via list = true)
+        
         function library:keybind_panel()
             if library.keybind_list then return library.keybind_list end
 
@@ -3548,8 +3548,8 @@
             library.keybind_entries = library.keybind_entries or {}
             if library.keybind_panel_enabled == nil then library.keybind_panel_enabled = true end
 
-            -- own ScreenGui so the menu's minimize toggle (which disables
-            -- library.items) doesn't hide the keybind panel
+            
+            
             local screen = library.keybind_screen
             if not screen then
                 screen = library:create( "ScreenGui" , {
@@ -3622,7 +3622,7 @@
                 ZIndex = 62;
             })
 
-            -- same accent gradient + animated shimmer as the main window title
+            
             library.keybind_icon_gradient = library:create( "UIGradient" , {
                 Parent = header_icon;
                 Rotation = 0;
@@ -3672,15 +3672,15 @@
             library.keybind_list.Visible = visible
         end
 
-        -- toggle the whole panel on/off (used by a UI setting)
+        
         function library:set_keybind_panel_enabled(bool)
             library.keybind_panel_enabled = bool and true or false
             library:refresh_keybind_panel()
         end
 
-        -- floating "presence" pill: [logo] Title | <fps> FPS | <ping> ms
-        -- reuses the keybind panel's standalone-ScreenGui + accent-gradient
-        -- chrome and the main window's fps/ping sampling loop.
+        
+        
+        
         function library:presence_bar(properties)
             if library.presence_bar_frame then return library.presence_bar_frame end
             properties = properties or {}
@@ -3690,7 +3690,7 @@
             local title = properties.title or properties.Title
                 or properties.name or properties.Name or properties.text or "presence"
 
-            -- own ScreenGui so the menu minimize toggle doesn't hide it
+            
             local screen = library.presence_screen
             if not screen then
                 screen = library:create( "ScreenGui" , {
@@ -3746,7 +3746,7 @@
                 })
             end
 
-            -- logo
+            
             local icon = library:create( "ImageLabel" , {
                 Parent = bar;
                 Name = "\0";
@@ -3759,7 +3759,7 @@
                 ZIndex = 62;
             })
 
-            -- brand title (accent gradient, like the main window title)
+            
             local title_label = library:create( "TextLabel" , {
                 Parent = bar;
                 Name = "\0";
@@ -3830,7 +3830,7 @@
                 ZIndex = 62;
             })
 
-            -- fps/ping via the shared sampler (one RenderStepped for every widget)
+            
             do
                 local lastFps, lastPing = -1, -1
                 library:on_fps(function(fps, ping)
@@ -3848,7 +3848,7 @@
             return bar
         end
 
-        -- toggle the presence bar on/off (used by a UI setting)
+        
         function library:set_presence_enabled(bool)
             library.presence_enabled = bool and true or false
             if library.presence_bar_frame then
@@ -3856,25 +3856,25 @@
             end
         end
 
-        -- one shared poll loop. row is in the panel while the feature is
-        -- ENABLED (toggled on in the UI); the right-side status reads "Held"
-        -- while its key is physically down, "Off" otherwise.
+        
+        
+        
         function library:start_keybind_loop()
             if library.keybind_loop_started then return end
             library.keybind_loop_started = true
 
-            -- the status text only needs to refresh a few times a second;
-            -- polling every frame was pure overhead.
+            
+            
             local acc = 0
             run.RenderStepped:Connect(function(dt)
                 acc = acc + dt
                 if acc < 0.1 then return end
                 acc = 0
 
-                -- do nothing while the on-screen list is turned off or empty.
-                -- The panel can be hidden because no rows are active, so do not
-                -- use panel.Visible as a guard; this loop is what lets it wake
-                -- back up when a feature is enabled.
+                
+                
+                
+                
                 if library.keybind_panel_enabled == false then
                     if library.keybind_list then library.keybind_list.Visible = false end
                     return
@@ -3888,14 +3888,14 @@
                 for _, e in entries do
                     local enabled = e.get_enabled and (e.get_enabled() and true or false) or false
 
-                    -- row only present while the feature is toggled on
+                    
                     if e.row.Visible ~= enabled then
                         e.row.Visible = enabled
                     end
 
                     if enabled then
-                        -- active = the feature is actually firing. prefer the
-                        -- feature's own state; fall back to physical key-hold.
+                        
+                        
                         local active
                         if e.get_active then
                             active = e.get_active() and true or false
@@ -3920,9 +3920,9 @@
             end)
         end
 
-        -- generic on-screen keybind row (not tied to library:keybind).
-        -- opts = { name = string, get_enabled = function()->bool (row shows while true),
-        --          get_key = function()->KeyCode/nil (drives the "Held" status) }
+        
+        
+        
         function library:add_keybind_entry(opts)
             opts = opts or {}
             local panel = library:keybind_panel()
@@ -4446,7 +4446,7 @@
                     CornerRadius = dim(0, 8)
                 });
 
-                -- neutral hairline border; never lights up, so no "blue box" look
+                
                 items[ "stroke" ] = library:create( "UIStroke" , {
                     Parent = items[ "button" ];
                     Color = rgb(48, 48, 56);
@@ -4455,7 +4455,7 @@
                     ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                 });
 
-                -- press feedback without touching layout
+                
                 items[ "scale" ] = library:create( "UIScale" , {
                     Parent = items[ "button" ];
                     Scale = 1
@@ -4487,7 +4487,7 @@
             local hovering = false
 
             items[ "button" ].MouseEnter:Connect(function()
-                if library.current_open then return end -- don't highlight under an open dropdown/popup
+                if library.current_open then return end 
                 hovering = true
                 library:tween(items[ "button" ], { BackgroundColor3 = hover_color }, SMOOTH, 0.16)
                 library:tween(items[ "name" ],   { TextColor3 = hover_text },        SMOOTH, 0.16)
@@ -4893,7 +4893,7 @@
                     CornerRadius = dim(0, 999)
                 });
 
-                -- animated gradient on the title text and the progress bar
+                
                 items[ "title_gradient" ] = library:create( "UIGradient" , {
                     Parent = items[ "title" ];
                     Rotation = 0;
@@ -4913,12 +4913,12 @@
                 });
 
                 if type(library.animate_title) == "function" then
-                    -- reuse the menu's synced shimmer driver (auto-cleans on Destroy)
+                    
                     library.animate_title(items[ "title_gradient" ])
                     library.animate_title(items[ "bar_gradient" ])
                     library.animate_title(items[ "icon_gradient" ])
                 else
-                    -- self-contained moving-rainbow fallback
+                    
                     cfg.gradient_conn = run.RenderStepped:Connect(function()
                         if not items[ "notification" ].Parent then
                             if cfg.gradient_conn then
