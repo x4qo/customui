@@ -3889,32 +3889,30 @@
                 end
 
                 for _, e in entries do
-                    if not e.row.Visible then e.row.Visible = true end
+                    local enabled = e.get_enabled and (e.get_enabled() and true or false) or false
 
-                    local featureOn = not e.get_enabled or e.get_enabled()
-                    local active
-                    if featureOn then
+                    if e.row.Visible ~= enabled then
+                        e.row.Visible = enabled
+                    end
+
+                    if enabled then
+                        local active
                         if e.get_active then
                             active = e.get_active() and true or false
                         else
                             local key = e.get_key and e.get_key() or nil
                             active = (typeof(key) == "EnumItem" and key.EnumType == Enum.KeyCode and uis:IsKeyDown(key)) and true or false
                         end
-                    else
-                        active = false
-                    end
 
-                    local mode = e.get_mode and e.get_mode() or nil
-                    local label = (not featureOn) and "—" or (active and ((mode == "Toggle") and "Toggled" or "Held") or "Off")
-                    if e.row_key.Text ~= label then e.row_key.Text = label end
+                        local mode = e.get_mode and e.get_mode() or nil
+                        local label = active and ((mode == "Toggle") and "Toggled" or "Held") or "Off"
+                        if e.row_key.Text ~= label then e.row_key.Text = label end
 
-                    local nameColor = featureOn and (active and rgb(255, 255, 255) or rgb(206, 206, 212)) or rgb(90, 90, 96)
-                    local keyColor  = featureOn and (active and themes.preset.accent or rgb(150, 150, 156)) or rgb(70, 70, 76)
-                    if active ~= e._held or featureOn ~= e._featureOn then
-                        e._held = active
-                        e._featureOn = featureOn
-                        library:tween(e.row_name, { TextColor3 = nameColor }, Enum.EasingStyle.Quint, 0.16)
-                        library:tween(e.row_key,  { TextColor3 = keyColor },  Enum.EasingStyle.Quint, 0.16)
+                        if active ~= e._held then
+                            e._held = active
+                            library:tween(e.row_name, { TextColor3 = active and rgb(255, 255, 255) or rgb(206, 206, 212) },   Enum.EasingStyle.Quint, 0.16)
+                            library:tween(e.row_key,  { TextColor3 = active and themes.preset.accent or rgb(150, 150, 156) }, Enum.EasingStyle.Quint, 0.16)
+                        end
                     end
                 end
 
