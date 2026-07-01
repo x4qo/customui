@@ -3627,6 +3627,15 @@
 
             items[ "input" ].Focused:Connect(function()
                 library:tween(items[ "input" ], {TextColor3 = rgb(245, 245, 245), BackgroundColor3 = rgb(33, 33, 37)}, Enum.EasingStyle.Quad, 0.18)
+                -- Roblox selects the whole field on focus and paints it with its (blue,
+                -- non-configurable) selection colour. Clear the selection so no blue shows.
+                task.defer(function()
+                    local inp = items[ "input" ]
+                    if inp then
+                        inp.CursorPosition = #inp.Text + 1
+                        inp.SelectionStart = -1
+                    end
+                end)
             end)
 
             items[ "input" ].FocusLost:Connect(function()
