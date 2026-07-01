@@ -2697,7 +2697,6 @@
                         BorderSizePixel = 0;
                         Size = dim2(1, 0, 1, 0);
                         CanvasSize = dim2(0, 0, 0, 0);
-                        AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y;
                         ScrollBarThickness = cfg.scrolling and 4 or 0;
                         ScrollBarImageColor3 = rgb(90, 90, 92);
                         ScrollingEnabled = cfg.scrolling;
@@ -2705,11 +2704,14 @@
                         ZIndex = 10;
                     });
 
-                    library:create( "UIListLayout" , {
+                    local list_layout = library:create( "UIListLayout" , {
                         Parent = items[ "list" ];
                         Padding = dim(0, 5);
                         SortOrder = Enum.SortOrder.LayoutOrder
                     });
+                    list_layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                        items[ "list" ].CanvasSize = dim2(0, 0, 0, list_layout.AbsoluteContentSize.Y + 6)
+                    end)
 
                     library:create( "UICorner" , {
                         Parent = items[ "outline" ];
