@@ -896,9 +896,20 @@
                     
                     
                 local SPEED = 0.4
+                -- Amplitude is matched to the base-colour keys (0.32 / 0.68) used in
+                -- title_build_shine. At +/-0.68 the sheen sits exactly at the text edge,
+                -- so when the phase wraps, the highlight leaves the right and re-enters
+                -- the left in the same instant: a seamless, gapless, one-directional
+                -- flow with no visible snap and no periodic pause.
+                local SHINE_AMP = 0.68
                 local cur_accent = nil
-                local _title_anim_acc = 0
-                local _title_anim_interval = 1 / 30
+                -- Framerate-independent phase accumulated from delta time (only while
+                -- the animation is actually running). Updating every frame keeps the
+                -- motion smooth at any refresh rate, avoids the large-float precision
+                -- loss of reading a wall clock, and resumes seamlessly after the UI is
+                -- hidden. Writing Offset on the handful of tracked gradients each frame
+                -- is negligible work, so there is no measurable FPS cost.
+                local phase = 0
                 run.RenderStepped:Connect(function(dt)
                     if #title_gradients == 0 then return end
                         local active = library.animate_title_active
@@ -908,10 +919,6 @@
                             local gui = library[ "items" ]
                             if gui and not gui.Enabled then return end
                         end
-
-                        _title_anim_acc = _title_anim_acc + dt
-                        if _title_anim_acc < _title_anim_interval then return end
-                        _title_anim_acc = 0
 
                         local c = themes.preset.accent
                         if c ~= cur_accent then
@@ -927,7 +934,8 @@
                             end
                         end
 
-                        local off = vec2(-0.75 + 1.5 * ((tick() * SPEED) % 1), 0)
+                        phase = (phase + dt * SPEED) % 1
+                        local off = vec2(-SHINE_AMP + (SHINE_AMP * 2) * phase, 0)
                         for idx = #title_gradients, 1, -1 do
                             local g = title_gradients[idx]
                             if g.Parent then
@@ -3328,8 +3336,8 @@
                 cfg.callback(Color, a)
             end
 
-            function cfg.update_color()
-                local mouse = uis:GetMouseLocation()
+            function cfg.update_color(pos)
+                local mouse = pos or uis:GetMouseLocation()
                 local offset = vec2(mouse.X, mouse.Y - gui_offset)
 
                 if dragging_sat then
@@ -3356,8 +3364,10 @@
             local function cp_start_drag()
                 if cp_move_conn then return end
                 cp_move_conn = uis.InputChanged:Connect(function(input)
-                    if (dragging_sat or dragging_hue or dragging_alpha) and input.UserInputType == Enum.UserInputType.MouseMovement then
-                        cfg.update_color()
+                    if (dragging_sat or dragging_hue or dragging_alpha)
+                        and (input.UserInputType == Enum.UserInputType.MouseMovement
+                            or input.UserInputType == Enum.UserInputType.Touch) then
+                        cfg.update_color(input.Position)
                     end
                 end)
             end
@@ -3366,7 +3376,8 @@
             end
 
             library:connection(uis.InputEnded, function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                    or input.UserInputType == Enum.UserInputType.Touch then
                     dragging_sat = false
                     dragging_hue = false
                     dragging_alpha = false
@@ -3376,16 +3387,19 @@
 
             items[ "alpha_gradient" ].MouseButton1Down:Connect(function()
                 dragging_alpha = true
+                cfg.update_color()
                 cp_start_drag()
             end)
 
             items[ "hue_gradient" ].MouseButton1Down:Connect(function()
                 dragging_hue = true
+                cfg.update_color()
                 cp_start_drag()
             end)
 
             items[ "sat" ].MouseButton1Down:Connect(function()
                 dragging_sat = true
+                cfg.update_color()
                 cp_start_drag()
             end)
 
