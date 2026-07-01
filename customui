@@ -272,15 +272,20 @@
                 local accum, frames, fps = 0, 0, 0
                 local sinceText = 0
                 local ping = 0
+                -- Update once per second. The per-frame work here is trivial, but each
+                -- refresh rewrites RichText + AutomaticSize labels (a layout pass), so a
+                -- calmer 1s cadence removes the micro-stutter without changing the driver
+                -- that both the window and presence-bar counters share (keeping them in sync).
+                local UPDATE_INTERVAL = 1
                 run.RenderStepped:Connect(function(dt)
                     accum     = accum + dt
                     sinceText = sinceText + dt
                     frames    = frames + 1
-                    if accum >= 0.5 then
+                    if accum >= UPDATE_INTERVAL then
                         fps = floor(frames / accum + 0.5)
                         accum, frames = 0, 0
                     end
-                    if sinceText < 0.5 then return end
+                    if sinceText < UPDATE_INTERVAL then return end
                     sinceText = 0
                     pcall(function() ping = floor(lp:GetNetworkPing() * 1000 + 0.5) end)
                     local consumers = self.fps_consumers
@@ -867,15 +872,15 @@
                 
                 
                 local function title_build_shine(c)
-                    local hi  = c:Lerp(title_white, 0.6)
-                    local mid = c:Lerp(title_white, 0.22)
+                    local hi  = c:Lerp(title_white, 0.85)
+                    local mid = c:Lerp(title_white, 0.45)
                     return rgbseq({
                         rgbkey(0.00, c),
-                        rgbkey(0.32, c),
-                        rgbkey(0.42, mid),
+                        rgbkey(0.28, c),
+                        rgbkey(0.40, mid),
                         rgbkey(0.50, hi),
-                        rgbkey(0.58, mid),
-                        rgbkey(0.68, c),
+                        rgbkey(0.60, mid),
+                        rgbkey(0.72, c),
                         rgbkey(1.00, c),
                     })
                 end
@@ -896,12 +901,12 @@
                     
                     
                 local SPEED = 0.4
-                -- Amplitude is matched to the base-colour keys (0.32 / 0.68) used in
-                -- title_build_shine. At +/-0.68 the sheen sits exactly at the text edge,
+                -- Amplitude is matched to the base-colour keys (0.28 / 0.72) used in
+                -- title_build_shine. At +/-0.72 the sheen sits exactly at the text edge,
                 -- so when the phase wraps, the highlight leaves the right and re-enters
                 -- the left in the same instant: a seamless, gapless, one-directional
                 -- flow with no visible snap and no periodic pause.
-                local SHINE_AMP = 0.68
+                local SHINE_AMP = 0.72
                 local cur_accent = nil
                 -- Framerate-independent phase accumulated from delta time (only while
                 -- the animation is actually running). Updating every frame keeps the
