@@ -914,40 +914,54 @@
                 local BASE_PERIOD = 2.2   -- seconds per sheen pass for normal elements
                 local REF_WIDTH   = 150   -- elements up to this width share BASE_PERIOD
                 local MAX_PERIOD  = 4.0   -- cap so very wide elements stay lively
+                -- Efficiency: a slow sheen looks identical past ~60Hz, so cap the visual
+                -- updates at 60/sec. On high-refresh displays this avoids redundant gradient
+                -- redraws. Motion is derived from real accumulated time, so speed stays exact
+                -- and smooth regardless of the cap.
+                local FRAME_INTERVAL = 1 / 60
+                -- Per-gradient period, refreshed at most once a second. Reading AbsoluteSize
+                -- can force a layout flush, so it is kept entirely out of the per-frame path:
+                -- grad_period holds a number only for oversized elements (nil = use base_off).
+                local grad_period = {}
+                local next_reclass = 0
                 local cur_accent = nil
-                -- Framerate-independent clock accumulated from delta time (only while the
-                -- animation is running). Each frame we compute one shared offset for the
-                -- common case and only read AbsoluteSize / allocate for oversized elements,
-                -- so the per-frame cost is negligible and independent of refresh rate.
                 local elapsed = 0
+                local frame_acc = 0
                 run.RenderStepped:Connect(function(dt)
                     if #title_gradients == 0 then return end
-                        local active = library.animate_title_active
-                        if active then
-                            if not active() then return end
-                        else
-                            local gui = library[ "items" ]
-                            if gui and not gui.Enabled then return end
-                        end
+                    local active = library.animate_title_active
+                    if active then
+                        if not active() then return end
+                    else
+                        local gui = library[ "items" ]
+                        if gui and not gui.Enabled then return end
+                    end
 
-                        local c = themes.preset.accent
-                        if c ~= cur_accent then
-                            cur_accent = c
-                            title_shine_seq = title_build_shine(c)
-                            for idx = #title_gradients, 1, -1 do
-                                local g = title_gradients[idx]
-                                if g.Parent then
-                                    g.Color = title_shine_seq
-                                else
-                                    remove(title_gradients, idx)
-                                end
+                    -- Track real time every frame, but only push offsets ~60x/sec.
+                    elapsed = elapsed + dt
+                    frame_acc = frame_acc + dt
+                    if frame_acc < FRAME_INTERVAL then return end
+                    frame_acc = 0
+
+                    local c = themes.preset.accent
+                    if c ~= cur_accent then
+                        cur_accent = c
+                        title_shine_seq = title_build_shine(c)
+                        for idx = #title_gradients, 1, -1 do
+                            local g = title_gradients[idx]
+                            if g.Parent then
+                                g.Color = title_shine_seq
+                            else
+                                grad_period[g] = nil
+                                remove(title_gradients, idx)
                             end
                         end
+                    end
 
-                        elapsed = elapsed + dt
-                        -- Shared offset for the common (<= REF_WIDTH) case: one allocation
-                        -- per frame, reused across every normal element so they stay in sync.
-                        local base_off = vec2(-SHINE_AMP + SPAN * ((elapsed / BASE_PERIOD) % 1), 0)
+                    -- Reclassify widths at most once a second (AbsoluteSize reads stay out
+                    -- of the hot loop) and prune destroyed gradients here.
+                    if elapsed >= next_reclass then
+                        next_reclass = elapsed + 1
                         for idx = #title_gradients, 1, -1 do
                             local g = title_gradients[idx]
                             local parent = g.Parent
@@ -956,15 +970,32 @@
                                 if width > REF_WIDTH then
                                     local period = BASE_PERIOD * (width / REF_WIDTH)
                                     if period > MAX_PERIOD then period = MAX_PERIOD end
-                                    g.Offset = vec2(-SHINE_AMP + SPAN * ((elapsed / period) % 1), 0)
+                                    grad_period[g] = period
                                 else
-                                    g.Offset = base_off
+                                    grad_period[g] = nil
                                 end
                             else
+                                grad_period[g] = nil
                                 remove(title_gradients, idx)
                             end
                         end
-                    end)
+                    end
+
+                    -- Hot path: one shared offset for normal elements (single allocation),
+                    -- a cheap table lookup, and a plain Offset write. No AbsoluteSize reads.
+                    local base_off = vec2(-SHINE_AMP + SPAN * ((elapsed / BASE_PERIOD) % 1), 0)
+                    for idx = 1, #title_gradients do
+                        local g = title_gradients[idx]
+                        if g.Parent then
+                            local period = grad_period[g]
+                            if period then
+                                g.Offset = vec2(-SHINE_AMP + SPAN * ((elapsed / period) % 1), 0)
+                            else
+                                g.Offset = base_off
+                            end
+                        end
+                    end
+                end)
                 end
 
                 
