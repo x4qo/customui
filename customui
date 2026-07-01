@@ -272,11 +272,11 @@
                 local accum, frames, fps = 0, 0, 0
                 local sinceText = 0
                 local ping = 0
-                -- Update once per second. The per-frame work here is trivial, but each
-                -- refresh rewrites RichText + AutomaticSize labels (a layout pass), so a
-                -- calmer 1s cadence removes the micro-stutter without changing the driver
-                -- that both the window and presence-bar counters share (keeping them in sync).
-                local UPDATE_INTERVAL = 1
+                -- Update every 1.5s to match the presence bar's counter cadence
+                -- (recode v2.lua). The per-frame work here is trivial, but each refresh
+                -- rewrites RichText + AutomaticSize labels (a layout pass), so a calm,
+                -- matched cadence keeps the two counters in step and avoids stutter.
+                local UPDATE_INTERVAL = 1.5
                 run.RenderStepped:Connect(function(dt)
                     accum     = accum + dt
                     sinceText = sinceText + dt
@@ -900,21 +900,26 @@
                     
                     
                     
-                local SPEED = 0.4
                 -- Amplitude is matched to the base-colour keys (0.28 / 0.72) used in
-                -- title_build_shine. At +/-0.72 the sheen sits exactly at the text edge,
-                -- so when the phase wraps, the highlight leaves the right and re-enters
-                -- the left in the same instant: a seamless, gapless, one-directional
-                -- flow with no visible snap and no periodic pause.
+                -- title_build_shine: at +/-0.72 the sheen sits exactly at the text edge,
+                -- so wrapping the phase gives a seamless, gapless flow with no snap.
                 local SHINE_AMP = 0.72
+                local SPAN      = SHINE_AMP * 2
+                -- UIGradient.Offset is a *fraction* of each element's width, so one shared
+                -- offset would sweep a wide title far faster (in pixels) than the tiny
+                -- keybind icon and they would look mismatched. Instead every element up to
+                -- REF_WIDTH shares BASE_PERIOD (so icon, titles and keybind header stay
+                -- phase-locked and identical), and only unusually wide elements stretch
+                -- their period so their sheen never races ahead.
+                local BASE_PERIOD = 2.2   -- seconds per sheen pass for normal elements
+                local REF_WIDTH   = 150   -- elements up to this width share BASE_PERIOD
+                local MAX_PERIOD  = 4.0   -- cap so very wide elements stay lively
                 local cur_accent = nil
-                -- Framerate-independent phase accumulated from delta time (only while
-                -- the animation is actually running). Updating every frame keeps the
-                -- motion smooth at any refresh rate, avoids the large-float precision
-                -- loss of reading a wall clock, and resumes seamlessly after the UI is
-                -- hidden. Writing Offset on the handful of tracked gradients each frame
-                -- is negligible work, so there is no measurable FPS cost.
-                local phase = 0
+                -- Framerate-independent clock accumulated from delta time (only while the
+                -- animation is running). Each frame we compute one shared offset for the
+                -- common case and only read AbsoluteSize / allocate for oversized elements,
+                -- so the per-frame cost is negligible and independent of refresh rate.
+                local elapsed = 0
                 run.RenderStepped:Connect(function(dt)
                     if #title_gradients == 0 then return end
                         local active = library.animate_title_active
@@ -939,12 +944,22 @@
                             end
                         end
 
-                        phase = (phase + dt * SPEED) % 1
-                        local off = vec2(-SHINE_AMP + (SHINE_AMP * 2) * phase, 0)
+                        elapsed = elapsed + dt
+                        -- Shared offset for the common (<= REF_WIDTH) case: one allocation
+                        -- per frame, reused across every normal element so they stay in sync.
+                        local base_off = vec2(-SHINE_AMP + SPAN * ((elapsed / BASE_PERIOD) % 1), 0)
                         for idx = #title_gradients, 1, -1 do
                             local g = title_gradients[idx]
-                            if g.Parent then
-                                g.Offset = off
+                            local parent = g.Parent
+                            if parent then
+                                local width = parent.AbsoluteSize.X
+                                if width > REF_WIDTH then
+                                    local period = BASE_PERIOD * (width / REF_WIDTH)
+                                    if period > MAX_PERIOD then period = MAX_PERIOD end
+                                    g.Offset = vec2(-SHINE_AMP + SPAN * ((elapsed / period) % 1), 0)
+                                else
+                                    g.Offset = base_off
+                                end
                             else
                                 remove(title_gradients, idx)
                             end
