@@ -2697,6 +2697,7 @@
                         BorderSizePixel = 0;
                         Size = dim2(1, 0, 1, 0);
                         CanvasSize = dim2(0, 0, 0, 0);
+                        AutomaticCanvasSize = Enum.AutomaticSize.Y;
                         ScrollBarThickness = cfg.scrolling and 4 or 0;
                         ScrollBarImageColor3 = rgb(90, 90, 92);
                         ScrollingEnabled = cfg.scrolling;
@@ -2704,14 +2705,11 @@
                         ZIndex = 10;
                     });
 
-                    local list_layout = library:create( "UIListLayout" , {
+                    library:create( "UIListLayout" , {
                         Parent = items[ "list" ];
                         Padding = dim(0, 5);
                         SortOrder = Enum.SortOrder.LayoutOrder
                     });
-                    list_layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                        items[ "list" ].CanvasSize = dim2(0, 0, 0, list_layout.AbsoluteContentSize.Y + 6)
-                    end)
 
                     library:create( "UICorner" , {
                         Parent = items[ "outline" ];
@@ -3576,22 +3574,36 @@
                     Parent = items[ "right_components" ];
                     Name = "\0";
                     TextTruncate = Enum.TextTruncate.AtEnd;
+                    TextXAlignment = Enum.TextXAlignment.Left;
                     BorderSizePixel = 0;
-                    PlaceholderColor3 = rgb(255, 255, 255);
+                    PlaceholderText = cfg.placeholder;
+                    PlaceholderColor3 = rgb(108, 108, 112);
                     CursorPosition = -1;
                     ClearTextOnFocus = false;
                     TextSize = 14;
-                    BackgroundColor3 = rgb(255, 255, 255);
                     TextColor3 = rgb(72, 72, 72);
                     BorderColor3 = rgb(0, 0, 0);
                     Position = dim2(1, 0, 0, 0);
-                    Size = dim2(1, -4, 0, 30);
-                    BackgroundColor3 = rgb(33, 33, 35)
+                    Size = dim2(1, -4, 0, 32);
+                    BackgroundColor3 = rgb(28, 28, 31)
                 });
 
                 library:create( "UICorner" , {
                     Parent = items[ "input" ];
-                    CornerRadius = dim(0, 3)
+                    CornerRadius = dim(0, 8)
+                });
+
+                items[ "input_stroke" ] = library:create( "UIStroke" , {
+                    Parent = items[ "input" ];
+                    Color = rgb(48, 48, 52);
+                    Thickness = 1;
+                    Transparency = 0.15
+                });
+
+                library:create( "UIPadding" , {
+                    Parent = items[ "input" ];
+                    PaddingLeft = dim(0, 10);
+                    PaddingRight = dim(0, 10)
                 });
 
                 library:create( "UIPadding" , {
@@ -3614,11 +3626,17 @@
             end)
 
             items[ "input" ].Focused:Connect(function()
-                library:tween(items[ "input" ], {TextColor3 = rgb(245, 245, 245)})
+                library:tween(items[ "input" ], {TextColor3 = rgb(245, 245, 245), BackgroundColor3 = rgb(33, 33, 37)}, Enum.EasingStyle.Quad, 0.18)
+                if items[ "input_stroke" ] then
+                    library:tween(items[ "input_stroke" ], {Color = themes.preset.accent, Transparency = 0}, Enum.EasingStyle.Quad, 0.18)
+                end
             end)
 
             items[ "input" ].FocusLost:Connect(function()
-                library:tween(items[ "input" ], {TextColor3 = rgb(72, 72, 72)})
+                library:tween(items[ "input" ], {TextColor3 = rgb(72, 72, 72), BackgroundColor3 = rgb(28, 28, 31)}, Enum.EasingStyle.Quad, 0.18)
+                if items[ "input_stroke" ] then
+                    library:tween(items[ "input_stroke" ], {Color = rgb(48, 48, 52), Transparency = 0.15}, Enum.EasingStyle.Quad, 0.18)
+                end
             end)
 
             if cfg.default then
