@@ -563,6 +563,34 @@
             if theme == "accent" and library.presence_icon_gradient then
                 library.presence_icon_gradient.Color = accent_sequence(color)
             end
+
+            if theme == "accent" and library.user_panel_username_gradient then
+                library.user_panel_username_gradient.Color = accent_sequence(color)
+            end
+
+            if theme == "accent" and library.user_panel_badge_gradient then
+                library.user_panel_badge_gradient.Color = accent_sequence(color)
+            end
+        end
+
+        -- Generic hook for a caller (the loader script) to fill in the sidebar user
+        -- panel's badge/pill text and colour, e.g. a licence tier label. This library
+        -- has no concept of what the badge means; it just displays whatever is set.
+        function library:set_user_badge(text, color)
+            local badge = library.user_panel_badge
+            local badge_text = library.user_panel_badge_text
+            if not badge or not badge_text then return end
+
+            if not text or text == "" then
+                badge.Visible = false
+                return
+            end
+
+            badge_text.Text = tostring(text)
+            if color then
+                badge_text.TextColor3 = color
+            end
+            badge.Visible = true
         end
 
         function library:connection(signal, callback)
@@ -652,6 +680,7 @@
                 icon = properties.icon or properties.Icon or "rbxassetid://10709790948";
                 game_name = properties.gameInfo or properties.game_info or properties.GameInfo or "Milenium for Counter-Strike: Global Offensive";
                 size = properties.size or properties.Size or dim2(0, 700, 0, 565);
+                show_user_panel = properties.user_info or properties.UserInfo or properties.user_panel or properties.UserPanel or false;
                 selected_tab;
                 items = {};
 
@@ -735,13 +764,15 @@
                     BackgroundColor3 = rgb(21, 21, 23)
                 });
 
+                local USER_PANEL_HEIGHT = 64
+
                 items[ "button_holder" ] = library:create( "Frame" , {
                     Parent = items[ "side_frame" ];
                     Name = "\0";
                     BackgroundTransparency = 1;
                     Position = dim2(0, 0, 0, 60);
                     BorderColor3 = rgb(0, 0, 0);
-                    Size = dim2(1, 0, 1, -60);
+                    Size = cfg.show_user_panel and dim2(1, 0, 1, -60 - USER_PANEL_HEIGHT) or dim2(1, 0, 1, -60);
                     BorderSizePixel = 0;
                     BackgroundColor3 = rgb(255, 255, 255)
                 }); cfg.button_holder = items[ "button_holder" ];
@@ -759,6 +790,194 @@
                     PaddingRight = dim(0, 11);
                     PaddingLeft = dim(0, 10)
                 });
+
+                if cfg.show_user_panel then
+                    items[ "user_panel" ] = library:create( "Frame" , {
+                        Parent = items[ "side_frame" ];
+                        Name = "\0";
+                        AnchorPoint = vec2(0, 1);
+                        Position = dim2(0, 0, 1, 0);
+                        Size = dim2(1, 0, 0, USER_PANEL_HEIGHT);
+                        BorderSizePixel = 0;
+                        BackgroundColor3 = rgb(18, 18, 20);
+                    });
+
+                    library:create( "Frame" , {
+                        Parent = items[ "user_panel" ];
+                        Name = "\0";
+                        Size = dim2(1, 0, 0, 1);
+                        BorderSizePixel = 0;
+                        BackgroundColor3 = rgb(21, 21, 23);
+                    });
+
+                    local up_avatar_wrap = library:create( "Frame" , {
+                        Parent = items[ "user_panel" ];
+                        Name = "\0";
+                        AnchorPoint = vec2(0, 0.5);
+                        Position = dim2(0, 12, 0.5, 1);
+                        Size = dim2(0, 36, 0, 36);
+                        BorderSizePixel = 0;
+                        ClipsDescendants = true;
+                        BackgroundColor3 = rgb(12, 12, 14);
+                    });
+
+                    library:create( "UICorner" , {
+                        Parent = up_avatar_wrap;
+                        CornerRadius = dim(1, 0);
+                    });
+
+                    local up_avatar_image = library:create( "ImageLabel" , {
+                        Parent = up_avatar_wrap;
+                        Name = "\0";
+                        Size = dim2(1, 0, 1, 0);
+                        BackgroundTransparency = 1;
+                        BorderSizePixel = 0;
+                        ScaleType = Enum.ScaleType.Crop;
+                        Image = "";
+                    });
+
+                    task.spawn(function()
+                        local ok, content = pcall(function()
+                            return players:GetUserThumbnailAsync(lp.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+                        end)
+                        if ok and content then
+                            up_avatar_image.Image = content
+                        end
+                    end)
+
+                    local up_avatar_mask = library:create( "Frame" , {
+                        Parent = up_avatar_wrap;
+                        Name = "\0";
+                        Size = dim2(1, 0, 1, 0);
+                        BackgroundColor3 = rgb(12, 12, 14);
+                        BackgroundTransparency = 0.05;
+                        BorderSizePixel = 0;
+                        Visible = false;
+                        ZIndex = 2;
+                    });
+
+                    library:create( "ImageLabel" , {
+                        Parent = up_avatar_mask;
+                        Name = "\0";
+                        AnchorPoint = vec2(0.5, 0.5);
+                        Position = dim2(0.5, 0, 0.5, 0);
+                        Size = dim2(0, 18, 0, 18);
+                        BackgroundTransparency = 1;
+                        Image = "rbxassetid://100033680381365";
+                        ImageColor3 = rgb(150, 150, 158);
+                        ZIndex = 3;
+                    });
+
+                    local up_info_column = library:create( "Frame" , {
+                        Parent = items[ "user_panel" ];
+                        Name = "\0";
+                        AnchorPoint = vec2(0, 0.5);
+                        Position = dim2(0, 58, 0.5, 1);
+                        Size = dim2(1, -92, 0, 38);
+                        BackgroundTransparency = 1;
+                        ClipsDescendants = true;
+                    });
+
+                    library:create( "UIListLayout" , {
+                        Parent = up_info_column;
+                        FillDirection = Enum.FillDirection.Vertical;
+                        VerticalAlignment = Enum.VerticalAlignment.Center;
+                        SortOrder = Enum.SortOrder.LayoutOrder;
+                        Padding = dim(0, 4);
+                    });
+
+                    local up_username = library:create( "TextLabel" , {
+                        FontFace = fonts.font;
+                        Parent = up_info_column;
+                        Name = "\0";
+                        LayoutOrder = 1;
+                        BackgroundTransparency = 1;
+                        BorderSizePixel = 0;
+                        TextColor3 = rgb(255, 255, 255);
+                        Text = lp.Name;
+                        TextSize = 14;
+                        TextXAlignment = Enum.TextXAlignment.Left;
+                        TextTruncate = Enum.TextTruncate.AtEnd;
+                        Size = dim2(1, 0, 0, 16);
+                    });
+
+                    library.user_panel_username_gradient = library:create( "UIGradient" , {
+                        Parent = up_username;
+                        Color = accent_sequence(themes.preset.accent);
+                    });
+
+                    local up_badge = library:create( "Frame" , {
+                        Parent = up_info_column;
+                        Name = "\0";
+                        LayoutOrder = 2;
+                        AutomaticSize = Enum.AutomaticSize.X;
+                        Size = dim2(0, 0, 0, 16);
+                        BorderSizePixel = 0;
+                        BackgroundColor3 = rgb(255, 255, 255);
+                        Visible = false;
+                    }); library.user_panel_badge = up_badge;
+
+                    library:create( "UICorner" , {
+                        Parent = up_badge;
+                        CornerRadius = dim(1, 0);
+                    });
+
+                    library.user_panel_badge_gradient = library:create( "UIGradient" , {
+                        Parent = up_badge;
+                        Color = accent_sequence(themes.preset.accent);
+                    });
+
+                    library:create( "UIPadding" , {
+                        Parent = up_badge;
+                        PaddingLeft = dim(0, 7);
+                        PaddingRight = dim(0, 7);
+                    });
+
+                    local up_badge_text = library:create( "TextLabel" , {
+                        FontFace = fonts.font;
+                        Parent = up_badge;
+                        Name = "\0";
+                        BackgroundTransparency = 1;
+                        BorderSizePixel = 0;
+                        TextColor3 = rgb(18, 18, 20);
+                        Text = "";
+                        TextSize = 11;
+                        AutomaticSize = Enum.AutomaticSize.X;
+                        Size = dim2(0, 0, 1, 0);
+                    }); library.user_panel_badge_text = up_badge_text;
+
+                    local up_anon_btn = library:create( "ImageButton" , {
+                        Parent = items[ "user_panel" ];
+                        Name = "\0";
+                        AnchorPoint = vec2(1, 0.5);
+                        Position = dim2(1, -10, 0.5, 1);
+                        Size = dim2(0, 20, 0, 20);
+                        BackgroundTransparency = 1;
+                        Image = "rbxassetid://100033680381365";
+                        ImageColor3 = rgb(150, 150, 158);
+                    });
+
+                    local up_anon_slash = library:create( "Frame" , {
+                        Parent = up_anon_btn;
+                        Name = "\0";
+                        AnchorPoint = vec2(0.5, 0.5);
+                        Position = dim2(0.5, 0, 0.5, 0);
+                        Size = dim2(0, 22, 0, 2);
+                        Rotation = 45;
+                        BorderSizePixel = 0;
+                        BackgroundColor3 = rgb(220, 80, 80);
+                        Visible = false;
+                    });
+
+                    local up_anonymous = false
+                    up_anon_btn.MouseButton1Click:Connect(function()
+                        up_anonymous = not up_anonymous
+                        up_avatar_mask.Visible = up_anonymous
+                        up_anon_slash.Visible = up_anonymous
+                        up_anon_btn.ImageColor3 = up_anonymous and rgb(220, 80, 80) or rgb(150, 150, 158)
+                        up_username.Text = up_anonymous and "••••••••" or lp.Name
+                    end)
+                end
 
                 items[ "title" ] = library:create( "Frame" , {
                     Parent = items[ "side_frame" ];
@@ -1259,6 +1478,11 @@
 
                 if library.animated_title then
                     animate_title(library.game_gradient)
+                end
+
+                if library.animated_title and library.user_panel_username_gradient then
+                    animate_title(library.user_panel_username_gradient)
+                    animate_title(library.user_panel_badge_gradient)
                 end
 
                 items[ "other_info" ] = library:create( "TextLabel" , {
