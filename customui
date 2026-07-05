@@ -660,7 +660,7 @@
                 {
                     key   = "safe",
                     tag   = "LITE",
-                    title = "Safe",
+                    title = "Essential",
                     desc  = "Only the essentials — ESP, siphon, aim assist & range.",
                 },
                 {
