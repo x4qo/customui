@@ -675,6 +675,20 @@
             local white   = rgb(255, 255, 255)
             local accent  = properties.accent or properties.Accent or themes.preset.accent
 
+            -- library:tween hardcodes EasingDirection.InOut, which eases in slowly —
+            -- great for the big entrance/exit moves, but it makes quick interactive
+            -- feedback (hover, click) feel laggy/delayed since nothing visibly moves for
+            -- the first chunk of the tween. Use EasingDirection.Out here instead: it
+            -- starts moving immediately and only eases at the end, which reads as
+            -- instant/snappy for short UI feedback animations.
+            local function fastTween(obj, props, time, style)
+                return tween_service:Create(
+                    obj,
+                    TweenInfo.new(time or 0.12, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                    props
+                ):Play()
+            end
+
             -- Gotham throughout, to match recode v2.lua.
             local FONT_BOLD = Enum.Font.GothamBold
             local FONT_MED  = Enum.Font.GothamMedium
@@ -934,17 +948,17 @@
 
                 card.MouseEnter:Connect(function()
                     if chosen then return end
-                    library:tween(card, { BackgroundColor3 = hover_bg }, Enum.EasingStyle.Quint, 0.2)
-                    library:tween(cstroke, { Color = accent, Transparency = 0.1 }, Enum.EasingStyle.Quint, 0.2)
-                    library:tween(cscale, { Scale = 1.03 }, Enum.EasingStyle.Quint, 0.2)
-                    library:tween(underline, { Size = dim2(1, -28, 0, 2) }, Enum.EasingStyle.Quint, 0.2)
+                    fastTween(card, { BackgroundColor3 = hover_bg }, 0.12)
+                    fastTween(cstroke, { Color = accent, Transparency = 0.1 }, 0.12)
+                    fastTween(cscale, { Scale = 1.03 }, 0.12)
+                    fastTween(underline, { Size = dim2(1, -28, 0, 2) }, 0.12)
                 end)
                 card.MouseLeave:Connect(function()
                     if chosen then return end
-                    library:tween(card, { BackgroundColor3 = base_bg }, Enum.EasingStyle.Quint, 0.2)
-                    library:tween(cstroke, { Color = base_stroke, Transparency = base_stroke_t }, Enum.EasingStyle.Quint, 0.2)
-                    library:tween(cscale, { Scale = 1 }, Enum.EasingStyle.Quint, 0.2)
-                    library:tween(underline, { Size = dim2(0, opt.accent and 40 or 0, 0, 2) }, Enum.EasingStyle.Quint, 0.2)
+                    fastTween(card, { BackgroundColor3 = base_bg }, 0.12)
+                    fastTween(cstroke, { Color = base_stroke, Transparency = base_stroke_t }, 0.12)
+                    fastTween(cscale, { Scale = 1 }, 0.12)
+                    fastTween(underline, { Size = dim2(0, opt.accent and 40 or 0, 0, 2) }, 0.12)
                 end)
                 card.MouseButton1Click:Connect(function()
                     if chosen then return end
@@ -952,20 +966,20 @@
 
                     -- Confirm pulse on the chosen card: brighten the border/underline and
                     -- pop the scale up before settling, so the pick reads clearly.
-                    library:tween(cstroke, { Color = accent, Transparency = 0 }, Enum.EasingStyle.Quint, 0.12)
-                    library:tween(underline, { Size = dim2(1, -28, 0, 2) }, Enum.EasingStyle.Quint, 0.15)
-                    library:tween(cscale, { Scale = 1.05 }, Enum.EasingStyle.Back, 0.14)
-                    task.delay(0.14, function()
+                    fastTween(cstroke, { Color = accent, Transparency = 0 }, 0.1)
+                    fastTween(underline, { Size = dim2(1, -28, 0, 2) }, 0.12)
+                    fastTween(cscale, { Scale = 1.05 }, 0.12, Enum.EasingStyle.Back)
+                    task.delay(0.12, function()
                         if cscale and cscale.Parent then
-                            library:tween(cscale, { Scale = 1 }, Enum.EasingStyle.Quint, 0.12)
+                            fastTween(cscale, { Scale = 1 }, 0.1)
                         end
                     end)
 
                     -- Dismiss every other option by shrinking it away.
                     for _, ref in ipairs(cardRefs) do
                         if ref.card ~= card then
-                            library:tween(ref.scale, { Scale = 0 }, Enum.EasingStyle.Quint, 0.18)
-                            library:tween(ref.card, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quint, 0.18)
+                            fastTween(ref.scale, { Scale = 0 }, 0.16)
+                            fastTween(ref.card, { BackgroundTransparency = 1 }, 0.16)
                         end
                     end
                 end)
@@ -985,16 +999,27 @@
             -- panel shrinks and fades away as one smooth unit.
             task.wait(0.16)
 
-            library:tween(panel_scale, { Scale = 0.88 }, Enum.EasingStyle.Quint, 0.24)
-            library:tween(panel, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quint, 0.22)
-            library:tween(panel_stroke, { Transparency = 1 }, Enum.EasingStyle.Quint, 0.22)
-            library:tween(backdrop, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quint, 0.26)
-            library:tween(blur, { Size = 0 }, Enum.EasingStyle.Quint, 0.26)
+            -- Unified duration so every exit tween lands at exactly the same time
+            -- instead of trailing off at slightly different moments.
+            local EXIT_TIME = 0.2
+            fastTween(panel_scale, { Scale = 0.88 }, EXIT_TIME)
+            fastTween(panel, { BackgroundTransparency = 1 }, EXIT_TIME)
+            fastTween(panel_stroke, { Transparency = 1 }, EXIT_TIME)
+            fastTween(backdrop, { BackgroundTransparency = 1 }, EXIT_TIME)
+            fastTween(blur, { Size = 0 }, EXIT_TIME)
 
-            task.delay(0.26, function()
-                if sel_gui then sel_gui:Destroy() end
-                if blur then blur:Destroy() end
-            end)
+            -- Block here until the exit animation has actually finished, instead of
+            -- returning immediately while it's still fading in the background. The
+            -- caller builds the entire main window synchronously right after this
+            -- function returns — hundreds of Instances all at once — and if that heavy
+            -- work runs *while* this tween is still playing, the engine hitches and the
+            -- fade visibly stutters. Waiting it out here means the fade always finishes
+            -- on an otherwise-idle frame, so it stays smooth, and the window build (and
+            -- its own pop-in) only starts once the screen is actually clear.
+            task.wait(EXIT_TIME)
+
+            if sel_gui then sel_gui:Destroy() end
+            if blur then blur:Destroy() end
 
             return chosen
         end
