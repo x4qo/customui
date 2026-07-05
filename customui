@@ -672,8 +672,9 @@
                 },
             }
 
-            local white  = rgb(255, 255, 255)
-            local accent = themes.preset.accent
+            local white   = rgb(255, 255, 255)
+            local accent  = properties.accent or properties.Accent or themes.preset.accent
+            local accent_soft = accent:Lerp(rgb(20, 20, 24), 0.72) -- muted accent for subtle fills
 
             local sel_gui = library:create("ScreenGui", {
                 Parent = gui_parent;
@@ -694,9 +695,9 @@
                 BackgroundColor3 = rgb(0, 0, 0);
                 BackgroundTransparency = 1;
             })
-            library:tween(backdrop, { BackgroundTransparency = 0.45 }, Enum.EasingStyle.Quint, 0.35)
+            library:tween(backdrop, { BackgroundTransparency = 0.5 }, Enum.EasingStyle.Quint, 0.3)
 
-            local PANEL_W, PANEL_H = 430, 258
+            local PANEL_W, PANEL_H = 420, 250
             local panel = library:create("Frame", {
                 Parent = sel_gui;
                 Name = "\0";
@@ -704,45 +705,61 @@
                 Position = dim2(0.5, 0, 0.5, 0);
                 Size = dim2(0, PANEL_W, 0, PANEL_H);
                 BorderSizePixel = 0;
-                BackgroundColor3 = rgb(14, 14, 16);
+                BackgroundColor3 = rgb(16, 16, 19);
             })
-            library:create("UICorner", { Parent = panel; CornerRadius = dim(0, 10) })
+            library:create("UICorner", { Parent = panel; CornerRadius = dim(0, 12) })
             library:create("UIStroke", {
                 Parent = panel;
-                Color = rgb(23, 23, 29);
+                Color = rgb(32, 32, 39);
+                Transparency = 0.1;
                 ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
             })
+            -- soft drop shadow behind the panel (sibling so it never dims the content)
+            library:create("ImageLabel", {
+                Parent = sel_gui;
+                Name = "\0";
+                AnchorPoint = vec2(0.5, 0.5);
+                Position = dim2(0.5, 0, 0.5, 0);
+                Size = dim2(0, PANEL_W + 70, 0, PANEL_H + 70);
+                BackgroundTransparency = 1;
+                Image = "rbxassetid://5028857084";
+                ImageColor3 = rgb(0, 0, 0);
+                ImageTransparency = 0.4;
+                ScaleType = Enum.ScaleType.Slice;
+                SliceCenter = Rect.new(24, 24, 276, 276);
+                ZIndex = 0;
+            })
 
-            -- subtle grow-in
-            panel.Size = dim2(0, PANEL_W - 24, 0, PANEL_H - 24)
-            library:tween(panel, { Size = dim2(0, PANEL_W, 0, PANEL_H) }, Enum.EasingStyle.Back, 0.35)
+            -- subtle grow / fade in
+            panel.Size = dim2(0, PANEL_W - 18, 0, PANEL_H - 18)
+            library:tween(panel, { Size = dim2(0, PANEL_W, 0, PANEL_H) }, Enum.EasingStyle.Quint, 0.28)
 
             -- Title row (badge + icon + brand text + subtitle) — mirrors window build.
             local title = library:create("Frame", {
                 Parent = panel;
                 Name = "\0";
                 BackgroundTransparency = 1;
-                Position = dim2(0, 0, 0, 0);
-                Size = dim2(1, 0, 0, 74);
+                Position = dim2(0, 4, 0, 4);
+                Size = dim2(1, -8, 0, 64);
             })
 
             local badge = library:create("Frame", {
                 Parent = title;
                 Name = "\0";
                 AnchorPoint = vec2(0, 0.5);
-                Position = dim2(0, 18, 0.5, 0);
+                Position = dim2(0, 16, 0.5, 0);
                 Size = dim2(0, 40, 0, 40);
                 BorderSizePixel = 0;
-                BackgroundColor3 = themes.preset.accent;
-            }); library:apply_theme(badge, "accent", "BackgroundColor3")
-            library:create("UICorner", { Parent = badge; CornerRadius = dim(0, 10) })
+                BackgroundColor3 = accent;
+            })
+            library:create("UICorner", { Parent = badge; CornerRadius = dim(0, 11) })
             library:create("UIGradient", {
                 Parent = badge;
-                Rotation = 140;
-                Color = rgbseq{ rgbkey(0, rgb(255, 255, 255)), rgbkey(1, rgb(150, 150, 150)) };
+                Rotation = 115;
+                Color = rgbseq{ rgbkey(0, white), rgbkey(1, rgb(170, 170, 170)) };
             })
 
-            local badge_icon = library:create("ImageLabel", {
+            library:create("ImageLabel", {
                 Parent = badge;
                 Name = "\0";
                 AnchorPoint = vec2(0.5, 0.5);
@@ -752,25 +769,20 @@
                 Image = sel_icon;
                 ImageColor3 = rgb(255, 255, 255);
             })
-            local badge_icon_grad = library:create("UIGradient", {
-                Parent = badge_icon;
-                Rotation = 0;
-                Color = accent_sequence(accent);
-            })
 
             local text_holder = library:create("Frame", {
                 Parent = title;
                 Name = "\0";
                 AnchorPoint = vec2(0, 0.5);
-                Position = dim2(0, 70, 0.5, 0);
-                Size = dim2(1, -82, 0, 42);
+                Position = dim2(0, 68, 0.5, 0);
+                Size = dim2(1, -80, 0, 42);
                 BackgroundTransparency = 1;
             })
             library:create("UIListLayout", {
                 Parent = text_holder;
                 SortOrder = Enum.SortOrder.LayoutOrder;
                 VerticalAlignment = Enum.VerticalAlignment.Center;
-                Padding = dim(0, 1);
+                Padding = dim(0, 2);
             })
 
             local brand = library:create("TextLabel", {
@@ -780,17 +792,28 @@
                 LayoutOrder = 1;
                 Text = string.format("%s %s", sel_name, sel_suffix);
                 BackgroundTransparency = 1;
-                Size = dim2(1, 0, 0, 21);
+                Size = dim2(1, 0, 0, 20);
                 TextColor3 = rgb(255, 255, 255);
                 TextXAlignment = Enum.TextXAlignment.Left;
                 TextScaled = true;
-                TextSize = 19;
+                TextSize = 18;
             })
-            library:create("UITextSizeConstraint", { Parent = brand; MaxTextSize = 19; MinTextSize = 10 })
+            library:create("UITextSizeConstraint", { Parent = brand; MaxTextSize = 18; MinTextSize = 10 })
+
+            -- Static shine gradient; only its Offset is animated (cheap — no per-frame allocs).
+            local hi  = accent:Lerp(white, 0.9)
+            local mid = accent:Lerp(white, 0.5)
+            local shine_seq = rgbseq{
+                rgbkey(0.00, accent),
+                rgbkey(0.35, mid),
+                rgbkey(0.50, hi),
+                rgbkey(0.65, mid),
+                rgbkey(1.00, accent),
+            }
             local brand_grad = library:create("UIGradient", {
                 Parent = brand;
                 Rotation = 0;
-                Color = accent_sequence(accent);
+                Color = shine_seq;
             })
 
             library:create("TextLabel", {
@@ -801,7 +824,7 @@
                 Text = sel_sub;
                 BackgroundTransparency = 1;
                 Size = dim2(1, 0, 0, 14);
-                TextColor3 = rgb(150, 150, 150);
+                TextColor3 = rgb(135, 135, 145);
                 TextXAlignment = Enum.TextXAlignment.Left;
                 TextSize = 13;
             })
@@ -810,42 +833,22 @@
             library:create("Frame", {
                 Parent = panel;
                 Name = "\0";
-                Position = dim2(0, 14, 0, 74);
-                Size = dim2(1, -28, 0, 1);
+                Position = dim2(0, 16, 0, 72);
+                Size = dim2(1, -32, 0, 1);
                 BorderSizePixel = 0;
-                BackgroundColor3 = rgb(23, 23, 29);
+                BackgroundColor3 = rgb(30, 30, 37);
             })
 
-            -- animated shine driver (accent-tinted highlight sweeping the title + icon)
-            local function build_shine(c)
-                local hi  = c:Lerp(white, 0.85)
-                local mid = c:Lerp(white, 0.45)
-                return rgbseq{
-                    rgbkey(0.00, c),
-                    rgbkey(0.35, mid),
-                    rgbkey(0.50, hi),
-                    rgbkey(0.65, mid),
-                    rgbkey(1.00, c),
-                }
-            end
-
-            local shine_grads = { brand_grad, badge_icon_grad }
+            -- Cheap shine driver: only animates the gradient Offset (no allocations per frame).
             local alive = true
             local shine_conn
             do
                 local t = 0
                 shine_conn = run.RenderStepped:Connect(function(dt)
                     if not alive then return end
-                    local cur = themes.preset.accent
-                    local seq = build_shine(cur)
-                    t = (t + dt * 0.6) % 1
-                    local off = vec2(t * 2 - 1, 0)
-                    for i = 1, #shine_grads do
-                        local g = shine_grads[i]
-                        if g and g.Parent then
-                            g.Color = seq
-                            g.Offset = off
-                        end
+                    t = (t + dt * 0.35) % 1
+                    if brand_grad and brand_grad.Parent then
+                        brand_grad.Offset = vec2(t * 2 - 1, 0)
                     end
                 end)
             end
@@ -893,10 +896,9 @@
                     Position = dim2(0, 0, 0.5, 0);
                     Size = dim2(0, 3, 0, opt.accent and 34 or 0);
                     BorderSizePixel = 0;
-                    BackgroundColor3 = themes.preset.accent;
+                    BackgroundColor3 = accent;
                 })
                 library:create("UICorner", { Parent = bar; CornerRadius = dim(0, 3) })
-                library:apply_theme(bar, "accent", "BackgroundColor3")
 
                 -- rounded letter tile
                 local tile = library:create("Frame", {
@@ -906,11 +908,10 @@
                     Position = dim2(0, 14, 0.5, 0);
                     Size = dim2(0, 34, 0, 34);
                     BorderSizePixel = 0;
-                    BackgroundColor3 = opt.accent and themes.preset.accent or rgb(30, 30, 35);
+                    BackgroundColor3 = opt.accent and accent or accent_soft;
                 })
                 library:create("UICorner", { Parent = tile; CornerRadius = dim(0, 9) })
                 if opt.accent then
-                    library:apply_theme(tile, "accent", "BackgroundColor3")
                     library:create("UIGradient", {
                         Parent = tile;
                         Rotation = 140;
@@ -970,7 +971,7 @@
                 row.MouseEnter:Connect(function()
                     if chosen then return end
                     library:tween(row, { BackgroundColor3 = rgb(28, 28, 33) }, Enum.EasingStyle.Quint, 0.18)
-                    library:tween(rstroke, { Color = themes.preset.accent, Transparency = 0.3 }, Enum.EasingStyle.Quint, 0.18)
+                    library:tween(rstroke, { Color = accent, Transparency = 0.3 }, Enum.EasingStyle.Quint, 0.18)
                     library:tween(bar, { Size = dim2(0, 3, 0, 34) }, Enum.EasingStyle.Quint, 0.18)
                     library:tween(arrow, { TextColor3 = rgb(235, 235, 235) }, Enum.EasingStyle.Quint, 0.18)
                 end)
