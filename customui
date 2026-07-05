@@ -658,16 +658,16 @@
 
             local options = properties.options or {
                 {
-                    key   = "safe",
-                    title = "Safe",
-                    desc  = "Only the essentials — ESP, siphon, aim assist & range.",
-                    icon  = "rbxassetid://10709790948",
+                    key    = "safe",
+                    letter = "S",
+                    title  = "Safe",
+                    desc   = "Only the essentials — ESP, siphon, aim assist & range.",
                 },
                 {
-                    key   = "full",
-                    title = "Full",
-                    desc  = "The entire script with every feature loaded.",
-                    icon  = "rbxassetid://10709790948",
+                    key    = "full",
+                    letter = "F",
+                    title  = "Full",
+                    desc   = "The entire script with every feature loaded.",
                     accent = true,
                 },
             }
@@ -696,7 +696,7 @@
             })
             library:tween(backdrop, { BackgroundTransparency = 0.45 }, Enum.EasingStyle.Quint, 0.35)
 
-            local PANEL_W, PANEL_H = 380, 250
+            local PANEL_W, PANEL_H = 430, 258
             local panel = library:create("Frame", {
                 Parent = sel_gui;
                 Name = "\0";
@@ -850,97 +850,138 @@
                 end)
             end
 
-            -- Options row.
-            local buttons_holder = library:create("Frame", {
+            -- Options (stacked selectable rows).
+            local list = library:create("Frame", {
                 Parent = panel;
                 Name = "\0";
-                AnchorPoint = vec2(0.5, 1);
-                Position = dim2(0.5, 0, 1, -18);
-                Size = dim2(1, -36, 0, 132);
+                Position = dim2(0, 14, 0, 88);
+                Size = dim2(1, -28, 1, -102);
                 BackgroundTransparency = 1;
             })
             library:create("UIListLayout", {
-                Parent = buttons_holder;
-                FillDirection = Enum.FillDirection.Horizontal;
-                HorizontalAlignment = Enum.HorizontalAlignment.Center;
+                Parent = list;
+                FillDirection = Enum.FillDirection.Vertical;
                 SortOrder = Enum.SortOrder.LayoutOrder;
-                Padding = dim(0, 12);
+                Padding = dim(0, 10);
             })
 
             local chosen = nil
 
             local function make_option(order, opt)
-                local card = library:create("TextButton", {
-                    Parent = buttons_holder;
+                local row = library:create("TextButton", {
+                    Parent = list;
                     Name = "\0";
                     LayoutOrder = order;
                     AutoButtonColor = false;
                     Text = "";
-                    Size = dim2(0.5, -6, 1, 0);
+                    Size = dim2(1, 0, 0, 60);
                     BorderSizePixel = 0;
                     BackgroundColor3 = rgb(20, 20, 23);
                 })
-                library:create("UICorner", { Parent = card; CornerRadius = dim(0, 8) })
-                local stroke = library:create("UIStroke", {
-                    Parent = card;
-                    Color = opt.accent and themes.preset.accent or rgb(35, 35, 41);
-                    Transparency = opt.accent and 0.2 or 0;
+                library:create("UICorner", { Parent = row; CornerRadius = dim(0, 8) })
+                local rstroke = library:create("UIStroke", {
+                    Parent = row;
+                    Color = rgb(35, 35, 41);
+                    Transparency = 0;
                 })
-                if opt.accent then
-                    library:apply_theme(stroke, "accent", "Color")
-                end
 
-                local glyph = library:create("ImageLabel", {
-                    Parent = card;
+                -- accent left bar (persistent for the accent option, grows on hover)
+                local bar = library:create("Frame", {
+                    Parent = row;
                     Name = "\0";
-                    AnchorPoint = vec2(0.5, 0);
-                    Position = dim2(0.5, 0, 0, 22);
-                    Size = dim2(0, 30, 0, 30);
-                    BackgroundTransparency = 1;
-                    Image = opt.icon or sel_icon;
-                    ImageColor3 = rgb(255, 255, 255);
+                    AnchorPoint = vec2(0, 0.5);
+                    Position = dim2(0, 0, 0.5, 0);
+                    Size = dim2(0, 3, 0, opt.accent and 34 or 0);
+                    BorderSizePixel = 0;
+                    BackgroundColor3 = themes.preset.accent;
                 })
+                library:create("UICorner", { Parent = bar; CornerRadius = dim(0, 3) })
+                library:apply_theme(bar, "accent", "BackgroundColor3")
+
+                -- rounded letter tile
+                local tile = library:create("Frame", {
+                    Parent = row;
+                    Name = "\0";
+                    AnchorPoint = vec2(0, 0.5);
+                    Position = dim2(0, 14, 0.5, 0);
+                    Size = dim2(0, 34, 0, 34);
+                    BorderSizePixel = 0;
+                    BackgroundColor3 = opt.accent and themes.preset.accent or rgb(30, 30, 35);
+                })
+                library:create("UICorner", { Parent = tile; CornerRadius = dim(0, 9) })
                 if opt.accent then
-                    library:create("UIGradient", { Parent = glyph; Color = accent_sequence(themes.preset.accent) })
+                    library:apply_theme(tile, "accent", "BackgroundColor3")
+                    library:create("UIGradient", {
+                        Parent = tile;
+                        Rotation = 140;
+                        Color = rgbseq{ rgbkey(0, rgb(255, 255, 255)), rgbkey(1, rgb(175, 175, 175)) };
+                    })
                 end
+                library:create("TextLabel", {
+                    FontFace = fonts.font;
+                    Parent = tile;
+                    Name = "\0";
+                    Size = dim2(1, 0, 1, 0);
+                    BackgroundTransparency = 1;
+                    Text = opt.letter or string.sub(opt.title or "?", 1, 1);
+                    TextColor3 = opt.accent and rgb(18, 18, 22) or rgb(235, 235, 235);
+                    TextSize = 17;
+                })
 
                 library:create("TextLabel", {
                     FontFace = fonts.font;
-                    Parent = card;
+                    Parent = row;
                     Name = "\0";
-                    AnchorPoint = vec2(0.5, 0);
-                    Position = dim2(0.5, 0, 0, 60);
-                    Size = dim2(1, -16, 0, 20);
+                    Position = dim2(0, 60, 0, 12);
+                    Size = dim2(1, -84, 0, 18);
                     BackgroundTransparency = 1;
                     Text = opt.title or tostring(opt.key);
-                    TextColor3 = rgb(255, 255, 255);
-                    TextSize = 16;
+                    TextColor3 = rgb(245, 245, 245);
+                    TextXAlignment = Enum.TextXAlignment.Left;
+                    TextSize = 15;
                 })
-
                 library:create("TextLabel", {
                     FontFace = fonts.small;
-                    Parent = card;
+                    Parent = row;
                     Name = "\0";
-                    AnchorPoint = vec2(0.5, 0);
-                    Position = dim2(0.5, 0, 0, 82);
-                    Size = dim2(1, -20, 0, 40);
+                    Position = dim2(0, 60, 0, 31);
+                    Size = dim2(1, -84, 0, 16);
                     BackgroundTransparency = 1;
                     Text = opt.desc or "";
-                    TextWrapped = true;
-                    TextColor3 = rgb(150, 150, 150);
+                    TextColor3 = rgb(140, 140, 140);
+                    TextXAlignment = Enum.TextXAlignment.Left;
                     TextSize = 12;
-                    TextYAlignment = Enum.TextYAlignment.Top;
+                    TextTruncate = Enum.TextTruncate.AtEnd;
                 })
 
-                card.MouseEnter:Connect(function()
+                local arrow = library:create("TextLabel", {
+                    FontFace = fonts.font;
+                    Parent = row;
+                    Name = "\0";
+                    AnchorPoint = vec2(1, 0.5);
+                    Position = dim2(1, -14, 0.5, 0);
+                    Size = dim2(0, 16, 0, 16);
+                    BackgroundTransparency = 1;
+                    Text = "›";
+                    TextColor3 = rgb(120, 120, 120);
+                    TextSize = 22;
+                })
+
+                row.MouseEnter:Connect(function()
                     if chosen then return end
-                    library:tween(card, { BackgroundColor3 = rgb(28, 28, 32) }, Enum.EasingStyle.Quint, 0.2)
+                    library:tween(row, { BackgroundColor3 = rgb(28, 28, 33) }, Enum.EasingStyle.Quint, 0.18)
+                    library:tween(rstroke, { Color = themes.preset.accent, Transparency = 0.3 }, Enum.EasingStyle.Quint, 0.18)
+                    library:tween(bar, { Size = dim2(0, 3, 0, 34) }, Enum.EasingStyle.Quint, 0.18)
+                    library:tween(arrow, { TextColor3 = rgb(235, 235, 235) }, Enum.EasingStyle.Quint, 0.18)
                 end)
-                card.MouseLeave:Connect(function()
+                row.MouseLeave:Connect(function()
                     if chosen then return end
-                    library:tween(card, { BackgroundColor3 = rgb(20, 20, 23) }, Enum.EasingStyle.Quint, 0.2)
+                    library:tween(row, { BackgroundColor3 = rgb(20, 20, 23) }, Enum.EasingStyle.Quint, 0.18)
+                    library:tween(rstroke, { Color = rgb(35, 35, 41), Transparency = 0 }, Enum.EasingStyle.Quint, 0.18)
+                    library:tween(bar, { Size = dim2(0, 3, 0, opt.accent and 34 or 0) }, Enum.EasingStyle.Quint, 0.18)
+                    library:tween(arrow, { TextColor3 = rgb(120, 120, 120) }, Enum.EasingStyle.Quint, 0.18)
                 end)
-                card.MouseButton1Click:Connect(function()
+                row.MouseButton1Click:Connect(function()
                     if chosen then return end
                     chosen = opt.key
                 end)
