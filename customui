@@ -653,7 +653,7 @@
 
             local sel_name    = properties.name    or properties.Name    or "Vampire"
             local sel_suffix  = properties.suffix  or properties.Suffix  or "Legends"
-            local sel_sub     = properties.subtitle or properties.Subtitle or "choose how much to load"
+            local sel_sub     = properties.subtitle or properties.Subtitle or "choose which version to load"
             local sel_icon    = properties.icon    or properties.Icon    or library.window_icon or "rbxassetid://10709790948"
 
             local options = properties.options or {
@@ -711,34 +711,21 @@
                 Size = dim2(0, PANEL_W, 0, PANEL_H);
                 BorderSizePixel = 0;
                 BackgroundColor3 = rgb(15, 15, 18);
+                BackgroundTransparency = 1;
             })
-            library:create("UICorner", { Parent = panel; CornerRadius = dim(0, 14) })
-            library:create("UIStroke", {
+            local panel_stroke = library:create("UIStroke", {
                 Parent = panel;
                 Color = rgb(33, 33, 41);
-                Transparency = 0.05;
+                Transparency = 1;
                 ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
             })
-            -- soft drop shadow behind the panel (sibling so it never dims the content)
-            local shadow = library:create("ImageLabel", {
-                Parent = sel_gui;
-                Name = "\0";
-                AnchorPoint = vec2(0.5, 0.5);
-                Position = dim2(0.5, 0, 0.5, 0);
-                Size = dim2(0, PANEL_W + 80, 0, PANEL_H + 80);
-                BackgroundTransparency = 1;
-                Image = "rbxassetid://5028857084";
-                ImageColor3 = rgb(0, 0, 0);
-                ImageTransparency = 1;
-                ScaleType = Enum.ScaleType.Slice;
-                SliceCenter = Rect.new(24, 24, 276, 276);
-                ZIndex = 0;
-            })
-            library:tween(shadow, { ImageTransparency = 0.35 }, Enum.EasingStyle.Quint, 0.3)
+            library:create("UICorner", { Parent = panel; CornerRadius = dim(0, 14) })
 
-            -- Smooth grow / fade in via UIScale (no layout thrash).
-            local panel_scale = library:create("UIScale", { Parent = panel; Scale = 0.94 })
-            library:tween(panel_scale, { Scale = 1 }, Enum.EasingStyle.Quint, 0.3)
+            -- Smooth grow + fade in via UIScale and transparency (no layout thrash).
+            local panel_scale = library:create("UIScale", { Parent = panel; Scale = 0.9 })
+            library:tween(panel_scale, { Scale = 1 }, Enum.EasingStyle.Quint, 0.32)
+            library:tween(panel, { BackgroundTransparency = 0 }, Enum.EasingStyle.Quint, 0.28)
+            library:tween(panel_stroke, { Transparency = 0.05 }, Enum.EasingStyle.Quint, 0.28)
 
             -- Header (accent badge + crown + brand + subtitle).
             local badge = library:create("Frame", {
@@ -848,6 +835,7 @@
             })
 
             local chosen = nil
+            local cardRefs = {}
 
             local function make_option(order, opt)
                 local base_bg = opt.accent and accent:Lerp(rgb(17, 17, 20), 0.86) or rgb(21, 21, 25)
@@ -873,6 +861,7 @@
                     Thickness = 1;
                 })
                 local cscale = library:create("UIScale", { Parent = card; Scale = 1 })
+                insert(cardRefs, { card = card, scale = cscale })
 
                 -- tag pill
                 local pill = library:create("Frame", {
@@ -951,7 +940,25 @@
                 card.MouseButton1Click:Connect(function()
                     if chosen then return end
                     chosen = opt.key
-                    library:tween(cscale, { Scale = 0.97 }, Enum.EasingStyle.Quint, 0.12)
+
+                    -- Confirm pulse on the chosen card: brighten the border/underline and
+                    -- pop the scale up before settling, so the pick reads clearly.
+                    library:tween(cstroke, { Color = accent, Transparency = 0 }, Enum.EasingStyle.Quint, 0.12)
+                    library:tween(underline, { Size = dim2(1, -28, 0, 2) }, Enum.EasingStyle.Quint, 0.15)
+                    library:tween(cscale, { Scale = 1.05 }, Enum.EasingStyle.Back, 0.14)
+                    task.delay(0.14, function()
+                        if cscale and cscale.Parent then
+                            library:tween(cscale, { Scale = 1 }, Enum.EasingStyle.Quint, 0.12)
+                        end
+                    end)
+
+                    -- Dismiss every other option by shrinking it away.
+                    for _, ref in ipairs(cardRefs) do
+                        if ref.card ~= card then
+                            library:tween(ref.scale, { Scale = 0 }, Enum.EasingStyle.Quint, 0.18)
+                            library:tween(ref.card, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quint, 0.18)
+                        end
+                    end
                 end)
             end
 
@@ -965,10 +972,16 @@
             alive = false
             if shine_conn then shine_conn:Disconnect() end
 
-            library:tween(panel_scale, { Scale = 0.95 }, Enum.EasingStyle.Quint, 0.22)
-            library:tween(backdrop, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quint, 0.25)
-            library:tween(shadow, { ImageTransparency = 1 }, Enum.EasingStyle.Quint, 0.22)
-            task.delay(0.3, function()
+            -- Let the confirm-pulse and dismiss animation play out before the whole
+            -- panel shrinks and fades away as one smooth unit.
+            task.wait(0.16)
+
+            library:tween(panel_scale, { Scale = 0.88 }, Enum.EasingStyle.Quint, 0.24)
+            library:tween(panel, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quint, 0.22)
+            library:tween(panel_stroke, { Transparency = 1 }, Enum.EasingStyle.Quint, 0.22)
+            library:tween(backdrop, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quint, 0.26)
+
+            task.delay(0.26, function()
                 if sel_gui then sel_gui:Destroy() end
             end)
 
@@ -1034,6 +1047,15 @@
                     BorderSizePixel = 0;
                     BackgroundColor3 = rgb(14, 14, 16)
                 }); items[ "main" ].Position = dim2(0, items[ "main" ].AbsolutePosition.X, 0, items[ "main" ].AbsolutePosition.Y)
+
+                -- Smooth pop-in as the window replaces the version selector: a quick
+                -- scale + fade so the handoff never feels like an abrupt jump-cut.
+                do
+                    local mainScale = library:create( "UIScale" , { Parent = items[ "main" ]; Scale = 0.94 } )
+                    items[ "main" ].BackgroundTransparency = 1
+                    library:tween(mainScale, { Scale = 1 }, Enum.EasingStyle.Quint, 0.28)
+                    library:tween(items[ "main" ], { BackgroundTransparency = 0 }, Enum.EasingStyle.Quint, 0.22)
+                end
 
                 library:create( "UICorner" , {
                     Parent = items[ "main" ];
@@ -2853,6 +2875,10 @@
             cfg.default = options.default or (cfg.multi and {cfg.items[1]}) or cfg.items[1] or "None"
             flags[cfg.flag] = cfg.default
 
+            -- Extra height reserved for the search box on scrolling (player-list style)
+            -- dropdowns; 0 for every other dropdown so their layout is unaffected.
+            local SEARCH_BOX_HEIGHT = cfg.scrolling and 30 or 0
+
             local items = cfg.items; do
 
                     items[ "dropdown_object" ] = library:create( "TextButton" , {
@@ -3020,13 +3046,45 @@
                         Parent = items[ "outline" ]
                     });
 
+                    -- Search box for long scrolling lists (e.g. whitelist/target player
+                    -- pickers) so users can look up a username instead of scrolling.
+                    -- Purely a client-side text filter over the already-rendered option
+                    -- buttons — it never touches refresh_options, so it can't trigger a
+                    -- player-list refresh on its own.
+                    if cfg.scrolling then
+                        items[ "search_box" ] = library:create( "TextBox" , {
+                            FontFace = fonts.small;
+                            Parent = items[ "outline" ];
+                            Name = "\0";
+                            Position = dim2(0, 0, 0, 0);
+                            Size = dim2(1, -3, 0, 24);
+                            BackgroundColor3 = rgb(26, 26, 28);
+                            BorderSizePixel = 0;
+                            Text = "";
+                            PlaceholderText = "Search...";
+                            PlaceholderColor3 = rgb(110, 110, 112);
+                            TextColor3 = rgb(230, 230, 230);
+                            ClearTextOnFocus = false;
+                            TextXAlignment = Enum.TextXAlignment.Left;
+                            TextSize = 13;
+                            ZIndex = 11;
+                        });
+                        library:create( "UICorner" , { Parent = items[ "search_box" ]; CornerRadius = dim(0, 4) });
+                        library:create( "UIPadding" , {
+                            Parent = items[ "search_box" ];
+                            PaddingLeft = dim(0, 7);
+                            PaddingRight = dim(0, 7);
+                        });
+                    end
+
                     items[ "list" ] = library:create( "ScrollingFrame" , {
                         Parent = items[ "outline" ];
                         Name = "\0";
                         Active = true;
+                        Position = dim2(0, 0, 0, SEARCH_BOX_HEIGHT);
                         BackgroundTransparency = 1;
                         BorderSizePixel = 0;
-                        Size = dim2(1, 0, 1, 0);
+                        Size = dim2(1, 0, 1, -SEARCH_BOX_HEIGHT);
                         CanvasSize = dim2(0, 0, 0, 0);
                         AutomaticCanvasSize = Enum.AutomaticSize.Y;
                         ScrollBarThickness = cfg.scrolling and 4 or 0;
@@ -3105,11 +3163,28 @@
                 return button
             end
 
+            -- Client-side filter over the already-rendered option buttons — never
+            -- touches refresh_options, so typing here can't trigger a player-list
+            -- re-scan; it only shows/hides buttons that already exist.
+            local function applySearchFilter()
+                local box = items[ "search_box" ]
+                if not box then return end
+                local query = box.Text:lower()
+                for _, option in cfg.option_instances do
+                    option.Visible = (query == "") or (option.Text:lower():find(query, 1, true) ~= nil)
+                end
+            end
+
+            if items[ "search_box" ] then
+                items[ "search_box" ]:GetPropertyChangedSignal("Text"):Connect(applySearchFilter)
+            end
+
             function cfg.set_visible(bool)
                 local target = cfg.y_size
                 if cfg.scrolling and cfg.max_height and target > cfg.max_height then
                     target = cfg.max_height
                 end
+                target += SEARCH_BOX_HEIGHT
                 local a = bool and target or 0
 
                 
@@ -3203,6 +3278,11 @@
                         end
                     end)
                 end
+
+                -- Re-apply whatever search query is currently typed to the freshly
+                -- rendered buttons (refresh only ever runs from an explicit button
+                -- press elsewhere — this never triggers a refresh itself).
+                applySearchFilter()
             end
 
             items[ "dropdown" ].MouseButton1Click:Connect(function()
