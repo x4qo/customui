@@ -702,6 +702,15 @@
             })
             library:tween(backdrop, { BackgroundTransparency = 0.5 }, Enum.EasingStyle.Quint, 0.3)
 
+            -- Blur the game behind the picker for a proper "modal" feel. Owned entirely
+            -- by this function — created fresh and destroyed on exit, so it never lingers
+            -- into the main window or fights with any blur the game itself uses.
+            local blur = Instance.new("BlurEffect")
+            blur.Name = "\0"
+            blur.Size = 0
+            blur.Parent = lighting
+            library:tween(blur, { Size = 20 }, Enum.EasingStyle.Quint, 0.35)
+
             local PANEL_W, PANEL_H = 460, 268
             local panel = library:create("Frame", {
                 Parent = sel_gui;
@@ -980,9 +989,11 @@
             library:tween(panel, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quint, 0.22)
             library:tween(panel_stroke, { Transparency = 1 }, Enum.EasingStyle.Quint, 0.22)
             library:tween(backdrop, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quint, 0.26)
+            library:tween(blur, { Size = 0 }, Enum.EasingStyle.Quint, 0.26)
 
             task.delay(0.26, function()
                 if sel_gui then sel_gui:Destroy() end
+                if blur then blur:Destroy() end
             end)
 
             return chosen
