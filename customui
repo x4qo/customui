@@ -13,6 +13,24 @@
     local tween_service = game:GetService("TweenService")
     local sound_service = game:GetService("SoundService")
 
+    -- After a task.wait()/WaitForChild yield, the resumed continuation runs on
+    -- the task-scheduler thread, which carries a reduced capability/identity set.
+    -- Writing to gethui()-parented instances from that thread throws
+    -- "The current thread cannot access 'Instance' (lacking capability Plugin)".
+    -- Re-assert the highest identity/capability the executor exposes before any
+    -- instance work so UI construction survives yields mid-build.
+    -- Undefined globals resolve to nil in Luau, so this safely probes whatever
+    -- identity API the host executor exposes without erroring when absent.
+    local set_thread_identity = setthreadidentity
+        or setidentity
+        or set_thread_identity
+        or (syn and syn.set_thread_identity)
+    local function restore_capability()
+        if set_thread_identity then
+            pcall(set_thread_identity, 8)
+        end
+    end
+
     local function random_gui_name()
         local ok, guid = pcall(function()
             return http_service:GenerateGUID(false)
@@ -627,6 +645,7 @@
         end
 
         function library:create(instance, options)
+            restore_capability()
             local ins = Instance.new(instance)
 
             for prop, value in options do
@@ -3246,10 +3265,22 @@
                 local box = items[ "search_box" ]
                 if not box then return end
                 local query = box.Text:lower()
+                local alias = cfg.search_alias
                 for _, option in cfg.option_instances do
-                    option.Visible = (query == "") or (option.Text:lower():find(query, 1, true) ~= nil)
+                    local match = (query == "") or (option.Text:lower():find(query, 1, true) ~= nil)
+                    -- Also match against an optional alias (e.g. a player's display
+                    -- name) so users can search by display name even though the
+                    -- option value stays the username.
+                    if not match and alias then
+                        local extra = alias[option.Text]
+                        if extra and extra:lower():find(query, 1, true) ~= nil then
+                            match = true
+                        end
+                    end
+                    option.Visible = match
                 end
             end
+            cfg.apply_search_filter = applySearchFilter
 
             if items[ "search_box" ] then
                 items[ "search_box" ]:GetPropertyChangedSignal("Text"):Connect(applySearchFilter)
