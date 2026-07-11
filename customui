@@ -97,7 +97,39 @@
         connections = {},
         notifications = {notifs = {}},
         current_open;
+        animations_enabled = true,
+        _anim_drivers = {},
     }
+
+    -- Central registry for every decorative per-frame animation driver (shine /
+    -- gradient loops). Each driver is { start = fn, stop = fn }. When animations
+    -- are disabled every driver is fully Disconnected so it costs 0 frame time;
+    -- re-enabling reconnects them. This is what makes the UI's per-frame cost
+    -- collapse to nothing when the user turns animated gradients off.
+    function library:register_anim_driver(driver)
+        self._anim_drivers[#self._anim_drivers + 1] = driver
+        if self.animations_enabled then
+            if driver.start then pcall(driver.start) end
+        elseif driver.stop then
+            pcall(driver.stop)
+        end
+        return driver
+    end
+
+    function library:set_animations_enabled(enabled)
+        enabled = enabled and true or false
+        if self.animations_enabled == enabled then return end
+        self.animations_enabled = enabled
+        local drivers = self._anim_drivers
+        for i = 1, #drivers do
+            local d = drivers[i]
+            if enabled then
+                if d.start then pcall(d.start) end
+            elseif d.stop then
+                pcall(d.stop)
+            end
+        end
+    end
 
     local themes = {
         preset = {
@@ -842,16 +874,22 @@
 
             local alive = true
             local shine_conn
-            do
-                local t = 0
+            local shine_t = 0
+            local function start_shine()
+                if shine_conn or not alive then return end
                 shine_conn = run.RenderStepped:Connect(function(dt)
                     if not alive then return end
-                    t = (t + dt * 0.35) % 1
+                    shine_t = (shine_t + dt * 0.35) % 1
                     if brand_grad and brand_grad.Parent then
-                        brand_grad.Offset = vec2(t * 2 - 1, 0)
+                        brand_grad.Offset = vec2(shine_t * 2 - 1, 0)
                     end
                 end)
             end
+            local function stop_shine()
+                if shine_conn then shine_conn:Disconnect(); shine_conn = nil end
+                if brand_grad and brand_grad.Parent then brand_grad.Offset = vec2(0, 0) end
+            end
+            library:register_anim_driver({ start = start_shine, stop = stop_shine })
 
             local body = library:create("Frame", {
                 Parent = panel;
@@ -1259,13 +1297,6 @@
                     })
                 end
 
-                local function animate_title(grad)
-                    insert(title_gradients, grad)
-
-                    if title_shine_seq then grad.Color = title_shine_seq end
-                    if title_driver_started then return end
-                    title_driver_started = true
-
                 local SHINE_AMP = 0.72
                 local SPAN      = SHINE_AMP * 2
 
@@ -1280,7 +1311,9 @@
                 local cur_accent = nil
                 local elapsed = 0
                 local frame_acc = 0
-                run.RenderStepped:Connect(function(dt)
+                local title_driver_conn = nil
+
+                local function title_step(dt)
                     if #title_gradients == 0 then return end
                     local active = library.animate_title_active
                     if active then
@@ -1343,10 +1376,42 @@
                             end
                         end
                     end
-                end)
+                end
+
+                local function start_title_driver()
+                    if title_driver_conn then return end
+                    if #title_gradients == 0 then return end
+                    title_driver_conn = run.RenderStepped:Connect(title_step)
+                end
+
+                local function stop_title_driver()
+                    if title_driver_conn then
+                        title_driver_conn:Disconnect()
+                        title_driver_conn = nil
+                    end
+                    -- Settle every gradient to a static (non-shifting) look so titles
+                    -- still render nicely with zero per-frame work.
+                    if title_shine_seq then
+                        for idx = 1, #title_gradients do
+                            local g = title_gradients[idx]
+                            if g.Parent then
+                                g.Color = title_shine_seq
+                                g.Offset = vec2(0, 0)
+                            end
+                        end
+                    end
+                end
+
+                local function animate_title(grad)
+                    insert(title_gradients, grad)
+                    if title_shine_seq then grad.Color = title_shine_seq end
+                    if library.animations_enabled then
+                        start_title_driver()
+                    end
                 end
 
                 library.animate_title = animate_title
+                library:register_anim_driver({ start = start_title_driver, stop = stop_title_driver })
 
                 if library.animated_title then
                     animate_title(library.brand_gradient)
