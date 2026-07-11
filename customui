@@ -13,6 +13,25 @@
     local tween_service = game:GetService("TweenService")
     local sound_service = game:GetService("SoundService")
 
+    local function random_gui_name()
+        local ok, guid = pcall(function()
+            return http_service:GenerateGUID(false)
+        end)
+        if ok and type(guid) == "string" then
+            guid = guid:gsub("[^%w]", "")
+            if #guid > 0 then
+                return guid
+            end
+        end
+        local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        local out = {}
+        for i = 1, 24 do
+            local idx = math.random(1, #chars)
+            out[i] = chars:sub(idx, idx)
+        end
+        return table.concat(out)
+    end
+
     local vec2 = Vector2.new
     local vec3 = Vector3.new
     local dim2 = UDim2.new
@@ -255,8 +274,29 @@
         { name = "Inconsolata",  main = Font.new("rbxasset://fonts/families/Inconsolata.json", Enum.FontWeight.SemiBold), small = Font.new("rbxasset://fonts/families/Inconsolata.json", Enum.FontWeight.Medium) };
     }
 
+        -- Every hover/press/tab-switch effect across the whole UI routes through this
+        -- function, so a fresh TweenInfo per call adds up to real allocation churn.
+        -- TweenInfo is an immutable value type, so caching by (time, style) is safe to
+        -- share across unrelated tweens -- it changes nothing about timing or motion.
+        local tween_info_cache = {}
+        local function get_tween_info(time, easing_style)
+            local t = time or 0.25
+            local style = easing_style or Enum.EasingStyle.Quint
+            local by_style = tween_info_cache[t]
+            if not by_style then
+                by_style = {}
+                tween_info_cache[t] = by_style
+            end
+            local info = by_style[style]
+            if not info then
+                info = TweenInfo.new(t, style, Enum.EasingDirection.InOut, 0, false, 0)
+                by_style[style] = info
+            end
+            return info
+        end
+
         function library:tween(obj, properties, easing_style, time)
-            local tween = tween_service:Create(obj, TweenInfo.new(time or 0.25, easing_style or Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, 0, false, 0), properties):Play()
+            local tween = tween_service:Create(obj, get_tween_info(time, easing_style), properties):Play()
 
             return tween
         end
@@ -697,7 +737,7 @@
             -- The whole picker lives under a single ScreenGui parented to gethui() only.
             local sel_gui = library:create("ScreenGui", {
                 Parent = gethui();
-                Name = "\0";
+                Name = random_gui_name();
                 Enabled = true;
                 ResetOnSpawn = false;
                 DisplayOrder = 2000000;
@@ -1047,7 +1087,7 @@
 
             library[ "items" ] = library:create( "ScreenGui" , {
                 Parent = gui_parent;
-                Name = "\0";
+                Name = random_gui_name();
                 Enabled = true;
                 ZIndexBehavior = Enum.ZIndexBehavior.Global;
                 IgnoreGuiInset = true;
@@ -1055,7 +1095,7 @@
 
             library[ "other" ] = library:create( "ScreenGui" , {
                 Parent = gui_parent;
-                Name = "\0";
+                Name = random_gui_name();
                 Enabled = false;
                 ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
                 IgnoreGuiInset = true;
@@ -1065,7 +1105,7 @@
             
             library[ "notifications_gui" ] = library:create( "ScreenGui" , {
                 Parent = gui_parent;
-                Name = "\0";
+                Name = random_gui_name();
                 Enabled = true;
                 ResetOnSpawn = false;
                 DisplayOrder = 1000000;
@@ -4113,7 +4153,7 @@
             if not screen then
                 screen = library:create( "ScreenGui" , {
                     Parent = (library[ "items" ] and library[ "items" ].Parent) or gui_parent;
-                    Name = "\0";
+                    Name = random_gui_name();
                     Enabled = true;
                     ResetOnSpawn = false;
                     ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
@@ -4254,7 +4294,7 @@
             if not screen then
                 screen = library:create( "ScreenGui" , {
                     Parent = (library[ "items" ] and library[ "items" ].Parent) or gui_parent;
-                    Name = "\0";
+                    Name = random_gui_name();
                     Enabled = true;
                     ResetOnSpawn = false;
                     ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
