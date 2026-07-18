@@ -97,7 +97,7 @@
         connections = {},
         notifications = {notifs = {}},
         current_open;
-        animations_enabled = true,
+        animations_enabled = false,
         _anim_drivers = {},
     }
 
@@ -348,6 +348,11 @@
 
                 local UPDATE_INTERVAL = 1.5
                 run.RenderStepped:Connect(function(dt)
+                    -- Skip all FPS/ping bookkeeping while the menu is closed; the
+                    -- values are only ever displayed inside the (now hidden) window,
+                    -- so this makes the loop cost 0 at idle with the menu minimized.
+                    local root = self.items
+                    if root and not root.Enabled then return end
                     accum     = accum + dt
                     sinceText = sinceText + dt
                     frames    = frames + 1
@@ -722,7 +727,7 @@
                     key   = "safe",
                     tag   = "LITE",
                     title = "Essential",
-                    desc  = "Only the essentials — ESP, siphon, aim assist & range.",
+                    desc  = "Only the essentials — ESP, siphon & aim assist.",
                 },
                 {
                     key    = "full",
