@@ -4423,20 +4423,22 @@
                 acc = 0
 
                 if library.keybind_panel_enabled == false then
-                    if library.keybind_list then library.keybind_list.Visible = false end
+                    if library.keybind_list and library.keybind_list.Visible then library.keybind_list.Visible = false end
                     return
                 end
                 local entries = library.keybind_entries
                 if not entries or not next(entries) then
-                    library:refresh_keybind_panel()
+                    if library.keybind_list and library.keybind_list.Visible then library.keybind_list.Visible = false end
                     return
                 end
 
+                local changed = false
                 for _, e in entries do
                     local enabled = e.get_enabled and (e.get_enabled() and true or false) or false
 
                     if e.row.Visible ~= enabled then
                         e.row.Visible = enabled
+                        changed = true
                     end
 
                     if enabled then
@@ -4453,8 +4455,13 @@
                         local mode = e.get_mode and e.get_mode() or nil
                         local state = active and ((mode == "Toggle") and "Toggled" or "Held") or "Off"
                         local key_name = is_keycode and key.Name or "None"
-                        local label = "[" .. key_name .. "] " .. state
-                        if e.row_key.Text ~= label then e.row_key.Text = label end
+                        -- Only rebuild the label string when it actually changes. Building it
+                        -- every tick allocated a new string per keybind at 10Hz forever = GC spikes.
+                        if key_name ~= e._lkn or state ~= e._lst then
+                            e._lkn = key_name
+                            e._lst = state
+                            e.row_key.Text = "[" .. key_name .. "] " .. state
+                        end
 
                         if active ~= e._held then
                             e._held = active
@@ -4464,7 +4471,11 @@
                     end
                 end
 
-                library:refresh_keybind_panel()
+                -- Only re-evaluate panel visibility when a row's visibility actually changed,
+                -- instead of iterating every row every tick.
+                if changed then
+                    library:refresh_keybind_panel()
+                end
             end)
         end
 
