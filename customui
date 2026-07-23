@@ -456,13 +456,21 @@
             local start_size = frame.Position
             local start
             local move_conn
+            local render_conn
+            local target_position
+            local dirty = false
 
+            -- InputChanged can fire several times per rendered frame; only the
+            -- most recent target matters, so we just record it here and flush a
+            -- single Position write per frame in RenderStepped. This avoids
+            -- invalidating the whole window's layout multiple times a frame,
+            -- which is what tanks FPS while dragging.
             local function on_move(input)
                 if input.UserInputType == Enum.UserInputType.MouseMovement then
                     local viewport_x = camera.ViewportSize.X
                     local viewport_y = camera.ViewportSize.Y
 
-                    local current_position = dim2(
+                    target_position = dim2(
                         0,
                         clamp(
                             start_size.X.Offset + (input.Position.X - start.X),
@@ -476,24 +484,37 @@
                             viewport_y - frame.Size.Y.Offset
                         )
                     )
-
-                    frame.Position = current_position
-                    library:close_element()
+                    dirty = true
                 end
+            end
+
+            local function apply()
+                if dirty and target_position then
+                    frame.Position = target_position
+                    dirty = false
+                end
+            end
+
+            local function stop()
+                if move_conn then move_conn:Disconnect(); move_conn = nil end
+                if render_conn then render_conn:Disconnect(); render_conn = nil end
+                dirty = false
             end
 
             frame.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                     start = input.Position
                     start_size = frame.Position
-                    if move_conn then move_conn:Disconnect() end
+                    library:close_element()
+                    stop()
                     move_conn = uis.InputChanged:Connect(on_move)
+                    render_conn = run.RenderStepped:Connect(apply)
                 end
             end)
 
             library:connection(uis.InputEnded, function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    if move_conn then move_conn:Disconnect(); move_conn = nil end
+                    stop()
                 end
             end)
         end
