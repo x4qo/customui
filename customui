@@ -680,8 +680,20 @@
             restore_capability()
             local ins = Instance.new(instance)
 
+            -- Set every property BEFORE parenting. Writing properties on an
+            -- already-parented instance forces the engine to re-run layout,
+            -- redraw and replicate on each individual assignment; doing all the
+            -- writes while the instance is still orphaned collapses that into a
+            -- single insertion cost. This is the single biggest smoothness win
+            -- when the UI is being built, since every widget funnels through here.
+            local parent = options.Parent
             for prop, value in options do
-                ins[prop] = value
+                if prop ~= "Parent" then
+                    ins[prop] = value
+                end
+            end
+            if parent ~= nil then
+                ins.Parent = parent
             end
 
             if options.FontFace == fonts.font then
@@ -5493,7 +5505,15 @@
                     library.animate_title(items[ "icon_gradient" ])
                 else
 
-                    cfg.gradient_conn = run.RenderStepped:Connect(function()
+                    -- Throttle the rainbow rebuild to ~30Hz. The phase only advances
+                    -- at 0.4/sec, so a full-framerate rebuild is visually identical to
+                    -- a 30Hz one, but every rebuild allocates a 9-entry table + a fresh
+                    -- ColorSequence and runs 9 HSV conversions. Capping the cadence
+                    -- roughly halves that allocation churn on a 60fps client (and much
+                    -- more on high-refresh monitors) with zero perceptible difference,
+                    -- which matters when several notifications stack at once.
+                    local grad_accum = 0
+                    cfg.gradient_conn = run.RenderStepped:Connect(function(dt)
                         if not items[ "notification" ].Parent then
                             if cfg.gradient_conn then
                                 cfg.gradient_conn:Disconnect()
@@ -5501,6 +5521,9 @@
                             end
                             return
                         end
+                        grad_accum = grad_accum + dt
+                        if grad_accum < 0.0333 then return end
+                        grad_accum = 0
                         local phase = (tick() * 0.4) % 1
                         local kps = {}
                         for i = 0, 8 do
