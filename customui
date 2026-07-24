@@ -101,34 +101,19 @@
         _anim_drivers = {},
     }
 
-    -- Central registry for every decorative per-frame animation driver (shine /
-    -- gradient loops). Each driver is { start = fn, stop = fn }. When animations
-    -- are disabled every driver is fully Disconnected so it costs 0 frame time;
-    -- re-enabling reconnects them. This is what makes the UI's per-frame cost
-    -- collapse to nothing when the user turns animated gradients off.
+    -- Decorative gradient / shine animations have been removed entirely. These two
+    -- shims keep the old call sites working but guarantee NO per-frame gradient
+    -- animation ever runs: any registered driver is immediately settled to its
+    -- static look via stop() and never connected, and toggling "animations" is a
+    -- no-op. This eliminates the animated-gradient render loops that dragged FPS
+    -- while toggling features.
     function library:register_anim_driver(driver)
-        self._anim_drivers[#self._anim_drivers + 1] = driver
-        if self.animations_enabled then
-            if driver.start then pcall(driver.start) end
-        elseif driver.stop then
-            pcall(driver.stop)
-        end
+        if driver and driver.stop then pcall(driver.stop) end
         return driver
     end
 
-    function library:set_animations_enabled(enabled)
-        enabled = enabled and true or false
-        if self.animations_enabled == enabled then return end
-        self.animations_enabled = enabled
-        local drivers = self._anim_drivers
-        for i = 1, #drivers do
-            local d = drivers[i]
-            if enabled then
-                if d.start then pcall(d.start) end
-            elseif d.stop then
-                pcall(d.stop)
-            end
-        end
+    function library:set_animations_enabled()
+        -- intentionally inert: gradient animations no longer exist
     end
 
     local themes = {
@@ -327,7 +312,10 @@
             end
             local info = by_style[style]
             if not info then
-                info = TweenInfo.new(t, style, Enum.EasingDirection.InOut, 0, false, 0)
+                -- EasingDirection.Out gives the snappy-start / soft-settle feel used
+                -- throughout velhubui, which reads as noticeably smoother for UI than
+                -- the old symmetric InOut. Applied globally so every tween benefits.
+                info = TweenInfo.new(t, style, Enum.EasingDirection.Out, 0, false, 0)
                 by_style[style] = info
             end
             return info
@@ -1730,18 +1718,26 @@
                 }); library:apply_theme(items[ "other_info" ], "accent", "TextColor3");
 
                 do
+                    -- The window info bar's fps/ping is driven externally by the host
+                    -- script's single always-on metrics loop via update_info_metrics,
+                    -- instead of starting a second per-frame RenderStepped (on_fps)
+                    -- here. One loop now feeds both this label and the host's presence
+                    -- bar, removing a redundant always-on render loop. The setter keeps
+                    -- the same change-detection + menu-hidden early-out the old loop had.
                     local guiRoot   = library[ "items" ]
                     local infoLabel = items[ "other_info" ]
                     local lastFps, lastPing = -1, -1
-                    library:on_fps(function(fps, ping)
+                    function library:update_info_metrics(fps, ping)
                         if guiRoot and not guiRoot.Enabled then return end
+                        fps  = fps or 0
+                        ping = ping or 0
                         if fps == lastFps and ping == lastPing then return end
                         lastFps, lastPing = fps, ping
                         infoLabel.Text = string.format(
                             '<font color="rgb(72, 72, 73)">fps:</font> %d  <font color="rgb(72, 72, 73)">ping:</font> %dms',
                             fps, ping
                         )
-                    end)
+                    end
                 end
             end
 
@@ -3845,6 +3841,12 @@
                         CornerRadius = dim(0, 4)
                     });
 
+                    -- Drives the velhubui-style pop-in when the picker opens.
+                    items[ "cp_scale" ] = library:create( "UIScale" , {
+                        Parent = items[ "colorpicker_holder" ];
+                        Scale = 1;
+                    });
+
             end;
 
             function cfg.set_visible(bool)
@@ -3852,8 +3854,15 @@
                 items[ "colorpicker_holder" ].Parent = bool and library[ "items" ] or library[ "other" ]
                 items[ "colorpicker_holder" ].Position = dim_offset(items[ "colorpicker" ].AbsolutePosition.X, items[ "colorpicker" ].AbsolutePosition.Y + items[ "colorpicker" ].AbsoluteSize.Y + 45)
 
-                library:tween(items[ "colorpicker_fade" ], {BackgroundTransparency = 1}, Enum.EasingStyle.Quad, 0.4)
-                library:tween(items[ "colorpicker_holder" ], {Position = items[ "colorpicker_holder" ].Position + dim_offset(0, 20)})
+                if bool then
+                    -- velhubui-style pop-in: scale up from small with a soft Back
+                    -- overshoot while the fade clears and the panel rises into place.
+                    items[ "cp_scale" ].Scale = 0.55
+                    library:tween(items[ "cp_scale" ], {Scale = 1}, Enum.EasingStyle.Back, 0.34)
+                end
+
+                library:tween(items[ "colorpicker_fade" ], {BackgroundTransparency = 1}, Enum.EasingStyle.Quad, 0.32)
+                library:tween(items[ "colorpicker_holder" ], {Position = items[ "colorpicker_holder" ].Position + dim_offset(0, 20)}, Enum.EasingStyle.Quint, 0.34)
 
                 if not (self.sanity and library.current_open == self and self.open) then
                     library:close_element(cfg)
@@ -3901,9 +3910,15 @@
                 cfg.callback(Color, a)
             end
 
-            function cfg.update_color(pos)
-                local mouse = pos or uis:GetMouseLocation()
-                local offset = vec2(mouse.X, mouse.Y - gui_offset)
+            function cfg.update_color()
+                -- The colour-picker elements live on IgnoreGuiInset=true ScreenGuis,
+                -- so their AbsolutePosition is already in full-viewport coordinates.
+                -- GetMouseLocation() reports the cursor in that SAME space, so we read
+                -- it directly with no GuiInset correction. The old code subtracted the
+                -- 36px inset AND sometimes fed in input.Position (a different coordinate
+                -- space), which is what made the picked colour land off from the cursor.
+                local mouse = uis:GetMouseLocation()
+                local offset = vec2(mouse.X, mouse.Y)
 
                 if dragging_sat then
                     s = math.clamp((offset - items["sat"].AbsolutePosition).X / items["sat"].AbsoluteSize.X, 0, 1)
@@ -3930,7 +3945,7 @@
                     if (dragging_sat or dragging_hue or dragging_alpha)
                         and (input.UserInputType == Enum.UserInputType.MouseMovement
                             or input.UserInputType == Enum.UserInputType.Touch) then
-                        cfg.update_color(input.Position)
+                        cfg.update_color()
                     end
                 end)
             end
